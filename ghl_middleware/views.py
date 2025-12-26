@@ -11,14 +11,21 @@ class WebhookPropiedadView(APIView):
     """
     def post(self, request):
         data = request.data
-        location_id = data.get('location_id')
+        
+        # 1. Lógica unificada para extraer location_id
+        location_data = data.get('location', {})
+        custom_data = data.get('customData', {}) # Extraemos customData una sola vez
+        
+        location_id = location_data.get('id') or custom_data.get('location_id')
         
         if not location_id:
             return Response({'error': 'Missing location_id'}, status=status.HTTP_400_BAD_REQUEST)
             
+        # IMPORTANTE: Esto fallará si no has creado la Agencia en el Admin de Django con este ID
         agencia = get_object_or_404(Agencia, location_id=location_id)
         
-        ghl_contact_id = data.get('contact_id') or data.get('id')
+        # Extraemos IDs
+        ghl_contact_id = custom_data.get('contact_id') or data.get('contact_id') or data.get('id')
         action = data.get('type', 'update')
 
         if not ghl_contact_id:
@@ -28,17 +35,16 @@ class WebhookPropiedadView(APIView):
             deleted, _ = Propiedad.objects.filter(agencia=agencia, ghl_contact_id=ghl_contact_id).delete()
             return Response({'status': 'deleted', 'count': deleted})
 
-        # Preparar datos para el serializer
+        # Preparar datos. OJO: Usamos custom_data.get() porque GHL suele enviar estos campos ahí
         prop_data = {
             'agencia': agencia.pk,
             'ghl_contact_id': ghl_contact_id,
-            'precio': data.get('precio'),
-            'zona': data.get('zona'),
-            'habitaciones': data.get('habitaciones'),
+            'precio': custom_data.get('precio') or data.get('precio'), # Intenta en custom, luego en root
+            'zona': custom_data.get('zona') or data.get('zona'),
+            'habitaciones': custom_data.get('habitaciones') or data.get('habitaciones'),
             'estado': 'activo'
         }
         
-        # Intentar obtener instancia existente para update
         try:
             propiedad = Propiedad.objects.get(agencia=agencia, ghl_contact_id=ghl_contact_id)
             serializer = PropiedadSerializer(propiedad, data=prop_data)
@@ -57,30 +63,32 @@ class WebhookClienteView(APIView):
     def post(self, request):
         data = request.data
         
-        # 1. Intentamos leer del objeto estándar 'location' de GHL
+        # 1. Lógica unificada para extraer location_id
         location_data = data.get('location', {})
-        location_id = location_data.get('id')
-    
-        # Fallback: Si no está ahí, buscamos donde lo tenías tú (customData)
-        if not location_id:
-            custom_data = data.get('customData', {})
-            location_id = custom_data.get('location_id')
+        custom_data = data.get('customData', {}) # Extraemos customData
+        
+        location_id = location_data.get('id') or custom_data.get('location_id')
     
         if not location_id:
             return Response({'error': 'Missing location_id'}, status=status.HTTP_400_BAD_REQUEST)
             
+        # IMPORTANTE: Crea la agencia en el Admin si te sale error 404
         agencia = get_object_or_404(Agencia, location_id=location_id)
         
-        ghl_contact_id = data.get('contact_id') or data.get('id')
+        # Extraemos IDs
+        ghl_contact_id = custom_data.get('contact_id') or data.get('contact_id') or data.get('id')
+        
         if not ghl_contact_id:
             return Response({'error': 'Missing contact_id'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Preparar datos del cliente
+        # CORRECCIÓN: Buscamos en custom_data primero, que es donde GHL pone los campos personalizados
         cliente_data = {
             'agencia': agencia.pk,
             'ghl_contact_id': ghl_contact_id,
-            'nombre': data.get('first_name', 'Unknown'),
-            'presupuesto_maximo': data.get('presupuesto'),
-            'zona_interes': data.get('zona_interes')
+            'nombre': data.get('first_name') or data.get('full_name') or 'Unknown',
+            'presupuesto_maximo': custom_data.get('presupuesto'), # Corregido: busca en customData
+            'zona_interes': custom_data.get('zona_interes')       # Corregido: busca en customData
         }
 
         try:
@@ -95,7 +103,6 @@ class WebhookClienteView(APIView):
             # Disparar lógica de Matching
             coincidencias = self.encontrar_coincidencias(cliente)
             
-            # Serializar resultados
             matches_serializer = PropiedadSerializer(coincidencias, many=True)
 
             return Response({
@@ -107,12 +114,13 @@ class WebhookClienteView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def encontrar_coincidencias(self, cliente):
-        """
-        Lógica de Matching protegida por ORM.
-        """
+        # Nota: Asegúrate que cliente.zona_interes no sea None antes de filtrar
+        if not cliente.zona_interes:
+            return Propiedad.objects.none()
+
         return Propiedad.objects.filter(
             agencia=cliente.agencia,
             zona__iexact=cliente.zona_interes,
-            precio__lte=cliente.presupuesto_maximo,
+            precio__lte=cliente.presupuesto_maximo or 999999999, # Fallback por si presupuesto es null
             estado='activo'
         )
