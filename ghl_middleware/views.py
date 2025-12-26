@@ -56,8 +56,16 @@ class WebhookClienteView(APIView):
     """
     def post(self, request):
         data = request.data
-        location_id = data.get('location_id')
         
+        # 1. Intentamos leer del objeto estándar 'location' de GHL
+        location_data = data.get('location', {})
+        location_id = location_data.get('id')
+    
+        # Fallback: Si no está ahí, buscamos donde lo tenías tú (customData)
+        if not location_id:
+            custom_data = data.get('customData', {})
+            location_id = custom_data.get('location_id')
+    
         if not location_id:
             return Response({'error': 'Missing location_id'}, status=status.HTTP_400_BAD_REQUEST)
             
