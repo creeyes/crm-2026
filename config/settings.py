@@ -1,6 +1,6 @@
 """
 Django settings for config project.
-Configured for production on Railway.
+Configured for production on Railway & Go High Level OAuth.
 """
 
 import os
@@ -14,17 +14,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --- CONFIGURACIÓN DE SEGURIDAD Y ENTORNO ---
 
 # 1. SECRET KEY:
-# Intenta leerla de las variables de entorno de Railway.
-# Si no la encuentra (local), usa la insegura por defecto para que no falle.
+# Lee de Railway o usa la default en local.
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-bqy+h6+*$li6+o^mrh)ys)$i&f(h)q0vhc7y7&n9c%3me1)yhl')
 
 # 2. DEBUG:
-# Si existe la variable RAILWAY_ENVIRONMENT, se pone en False (Producción).
-# Si no existe (estás en tu PC), se pone en True para ver errores.
+# False en producción (Railway), True en local.
 DEBUG = 'RAILWAY_ENVIRONMENT' not in os.environ
 
 # 3. ALLOWED HOSTS:
-# El '*' permite que Railway asigne cualquier dominio dinámico sin romper la app.
+# Permite el dominio dinámico de Railway.
 ALLOWED_HOSTS = ['*']
 
 
@@ -38,13 +36,13 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # Tus apps:
-    'ghl_middleware',
-    'rest_framework',
+    'ghl_middleware', # Tu lógica
+    'rest_framework', # Para la API
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    "whitenoise.middleware.WhiteNoiseMiddleware", # <--- CRÍTICO: Para que se vea el CSS en Railway
+    "whitenoise.middleware.WhiteNoiseMiddleware", # CRÍTICO: Para CSS en Railway
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -75,11 +73,8 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 # --- BASE DE DATOS (Auto-configurable) ---
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
 DATABASES = {
     'default': dj_database_url.config(
-        # Por defecto usa SQLite si no hay DB de Railway (para local)
         default='sqlite:///db.sqlite3',
         conn_max_age=600
     )
@@ -87,27 +82,15 @@ DATABASES = {
 
 
 # Password validation
-# https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
 ]
 
 
 # Internationalization
-# https://docs.djangoproject.com/en/4.2/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
@@ -115,28 +98,74 @@ USE_TZ = True
 
 
 # --- ARCHIVOS ESTÁTICOS (CSS/JS/IMG) ---
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
 STATIC_URL = 'static/'
-
-# Carpeta donde Django recolectará todos los estáticos en producción
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
-# Motor de almacenamiento optimizado (WhiteNoise)
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- CONFIGURACIÓN DRF (Opcional pero recomendado) ---
-# Para que la API sea accesible
+
+# --- CONFIGURACIÓN DRF ---
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ]
 }
 
-# --- SEGURIDAD EXTRA PARA RAILWAY (HTTPS) ---
-# Evita problemas de redirección infinita si usas HTTPS
-CSRF_TRUSTED_ORIGINS = ['https://*.railway.app'] 
+
+# --- SEGURIDAD EXTRA PARA RAILWAY Y GHL ---
+# Confía en el HTTPS de Railway
+CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app'] 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Si vas a cargar esta app dentro de un IFRAME en GHL (Custom Menu Link):
+X_FRAME_OPTIONS = 'ALLOWALL' 
+
+
+# --- LOGGING (CRÍTICO PARA VER ERRORES EN RAILWAY) ---
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
+
+
+# --- CONFIGURACIÓN "EL CRUZADO" (OAUTH2 GHL MARKETPLACE) ---
+# Estas variables DEBEN estar en "Variables" de tu proyecto en Railway.
+# Si no las pones en Railway, fallará la autenticación.
+
+# Credenciales de tu App en GHL Marketplace
+GHL_CLIENT_ID = os.environ.get('GHL_CLIENT_ID', '')
+GHL_CLIENT_SECRET = os.environ.get('GHL_CLIENT_SECRET', '')
+
+# URL de redirección (debe coincidir con la del Marketplace)
+# En local: http://localhost:8000/api/oauth/callback/
+# En Prod: https://tu-app.up.railway.app/api/oauth/callback/
+GHL_REDIRECT_URI = os.environ.get('GHL_REDIRECT_URI', 'http://localhost:8000/api/oauth/callback/')
+
+# Scopes: Permisos que pediste al crear la app (separados por espacios si es string, o lista)
+# Ajusta esto según lo que marcaste en el Marketplace.
+GHL_SCOPES = [
+    'contacts.readonly',
+    'contacts.write',
+    'locations.readonly',
+    # Agrega más scopes aquí si tu app hace más cosas
+]
