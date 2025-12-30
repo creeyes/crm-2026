@@ -1,7 +1,13 @@
 from django.urls import path
-from .views import WebhookPropiedadView, WebhookClienteView
+# Importamos también la vista del OAuth (GHLOAuthCallbackView) que definimos en views.py
+from .views import WebhookPropiedadView, WebhookClienteView, GHLOAuthCallbackView
 
 urlpatterns = [
+    # --- 1. RUTA OBLIGATORIA PARA INSTALAR LA APP (El Cruzado) ---
+    # GHL llamará aquí: https://tu-dominio.railway.app/api/oauth/callback/
+    path('oauth/callback/', GHLOAuthCallbackView.as_view(), name='ghl_oauth_callback'),
+
+    # --- 2. TUS WEBHOOKS DE NEGOCIO ---
     path('webhooks/propiedad/', WebhookPropiedadView.as_view(), name='webhook_propiedad'),
     path('webhooks/cliente/', WebhookClienteView.as_view(), name='webhook_cliente'),
 ]
