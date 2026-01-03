@@ -1,3 +1,4 @@
+# views.py
 import logging
 import requests
 from django.conf import settings
@@ -7,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Agencia, Propiedad, Cliente, GHLToken
-# Asegúrate de importar la Tarea de segundo plano
+from .serializers import PropiedadSerializer, ClienteSerializer
 from .tasks import sync_associations_background
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ class GHLOAuthCallbackView(APIView):
 
 
 # -------------------------------------------------------------------------
-# VISTA 2: WEBHOOK PROPIEDAD (Custom Object Trigger)
+# VISTA 2: WEBHOOK PROPIEDAD
 # -------------------------------------------------------------------------
 class WebhookPropiedadView(APIView):
     authentication_classes = []
@@ -109,7 +110,7 @@ class WebhookPropiedadView(APIView):
              return Response({'error': 'Missing Record ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         prop_data = {
-            'agencia': agencia.pk,
+            'agencia': agencia, # <--- CORREGIDO: Pasamos el objeto, no el ID (.pk)
             'ghl_contact_id': ghl_record_id,
             'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
             'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
@@ -123,7 +124,7 @@ class WebhookPropiedadView(APIView):
             defaults=prop_data
         )
 
-        # MATCHING: Propiedad -> Clientes
+        # MATCHING
         clientes_match = Cliente.objects.filter(
             agencia=agencia,
             zona_interes__iexact=propiedad.zona,
@@ -141,8 +142,6 @@ class WebhookPropiedadView(APIView):
                 token_obj = GHLToken.objects.get(location_id=location_id)
                 target_ids = [c.ghl_contact_id for c in clientes_match]
                 
-                # Caso Propiedad -> Muchos Clientes:
-                # Enviamos una sola tarea con la lista de clientes
                 sync_associations_background(
                     access_token=token_obj.access_token,
                     origin_record_id=propiedad.ghl_contact_id,
@@ -161,7 +160,7 @@ class WebhookPropiedadView(APIView):
 
 
 # -------------------------------------------------------------------------
-# VISTA 3: WEBHOOK CLIENTE (Contact Created/Updated Trigger)
+# VISTA 3: WEBHOOK CLIENTE
 # -------------------------------------------------------------------------
 class WebhookClienteView(APIView):
     authentication_classes = []
@@ -180,13 +179,12 @@ class WebhookClienteView(APIView):
             
         agencia = get_object_or_404(Agencia, location_id=location_id)
         
-        # TU CORRECCIÓN AQUI:
         ghl_contact_id = data.get('id') or custom_data.get('contact_id')
         if not ghl_contact_id:
              return Response({'error': 'Missing Contact ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         cliente_data = {
-            'agencia': agencia.pk,
+            'agencia': agencia, # <--- CORREGIDO: Pasamos el objeto, no el ID (.pk)
             'ghl_contact_id': ghl_contact_id,
             'nombre': f"{data.get('first_name', '')} {data.get('last_name', '')}".strip(),
             'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
@@ -194,6 +192,7 @@ class WebhookClienteView(APIView):
             'zona_interes': custom_data.get('zona_interes')        
         }
 
+        # Aquí es donde daba el error antes
         cliente, created = Cliente.objects.update_or_create(
             agencia=agencia, 
             ghl_contact_id=ghl_contact_id, 
@@ -203,7 +202,7 @@ class WebhookClienteView(APIView):
         if not cliente.zona_interes:
             return Response({'status': 'saved_no_zone'}, status=200)
 
-        # MATCHING: Cliente -> Propiedades
+        # MATCHING
         propiedades_match = Propiedad.objects.filter(
             agencia=agencia,
             zona__iexact=cliente.zona_interes,
@@ -221,14 +220,11 @@ class WebhookClienteView(APIView):
             try:
                 token_obj = GHLToken.objects.get(location_id=location_id)
                 
-                # Caso Cliente -> Muchas Propiedades:
-                # La API requiere que la URL sea el Custom Object (Propiedad).
-                # Por eso, lanzamos una tarea POR CADA propiedad encontrada.
                 for prop in propiedades_match:
                      sync_associations_background(
                         access_token=token_obj.access_token,
-                        origin_record_id=prop.ghl_contact_id, # La URL será la propiedad
-                        target_ids_list=[cliente.ghl_contact_id], # El target es este cliente
+                        origin_record_id=prop.ghl_contact_id, 
+                        target_ids_list=[cliente.ghl_contact_id],
                         association_type="contact"
                     )
 
