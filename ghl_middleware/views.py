@@ -219,7 +219,7 @@ class WebhookClienteView(APIView):
         agencia = get_object_or_404(Agencia, location_id=location_id)
         
         # 2. Identificar ID del Contacto
-        ghl_contact_id = data.get('id')
+        ghl_contact_id = data.get('id') or custom_data.get('contact_id')
         if not ghl_contact_id:
              return Response({'error': 'Missing Contact ID'}, status=status.HTTP_400_BAD_REQUEST)
 
