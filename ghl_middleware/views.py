@@ -1,3 +1,4 @@
+# views.py
 import logging
 import requests
 from django.conf import settings
@@ -5,29 +6,46 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+
 from .models import Agencia, Propiedad, Cliente, GHLToken
 from .serializers import PropiedadSerializer, ClienteSerializer
+# Importamos la función de ayuda que creamos arriba
+from .utils import ghl_associate_records 
 
-# Configuración de logs para ver errores en Railway
 logger = logging.getLogger(__name__)
 
 # -------------------------------------------------------------------------
-# PARTE 1: EL CRUZADO (Instalación de la App / OAuth)
+# HELPER INTERNO: LIMPIEZA DE DATOS
 # -------------------------------------------------------------------------
+def clean_currency(value):
+    """Convierte '$150,000' o '150000.00' a float puro."""
+    if not value:
+        return 0.0
+    try:
+        return float(str(value).replace('$', '').replace(',', '').strip())
+    except ValueError:
+        return 0.0
 
+def clean_int(value):
+    """Asegura que devolvemos un entero, default 0."""
+    if not value:
+        return 0
+    try:
+        return int(float(str(value))) # float primero por si viene "2.0"
+    except ValueError:
+        return 0
+
+# -------------------------------------------------------------------------
+# VISTA 1: OAUTH CALLBACK (Instalación)
+# -------------------------------------------------------------------------
 class GHLOAuthCallbackView(APIView):
-    """
-    Endpoint CRÍTICO: Recibe el código de GHL, genera el Token y crea la Agencia.
-    Sin esto, la app no se puede instalar y los webhooks darán error 404.
-    """
-    permission_classes = [] # Abierto para el handshake
+    permission_classes = []
 
     def get(self, request):
         code = request.query_params.get('code')
         if not code:
             return Response({"error": "No code provided"}, status=400)
 
-        # 1. Intercambio de Código por Token (El handshake)
         token_url = "https://services.leadconnectorhq.com/oauth/token"
         data = {
             'client_id': settings.GHL_CLIENT_ID,
@@ -44,7 +62,7 @@ class GHLOAuthCallbackView(APIView):
             if response.status_code == 200:
                 location_id = tokens.get('locationId')
                 
-                # 2. Guardamos el Token (Opcional pero recomendado)
+                # Guardar Token
                 GHLToken.objects.update_or_create(
                     location_id=location_id,
                     defaults={
@@ -56,107 +74,128 @@ class GHLOAuthCallbackView(APIView):
                     }
                 )
 
-                # 3. CREAMOS LA AGENCIA AUTOMÁTICAMENTE
-                # Esto es vital para que tus Webhooks de abajo funcionen y no den 404
+                # Crear/Activar Agencia
                 Agencia.objects.get_or_create(
                     location_id=location_id,
                     defaults={'active': True}
                 )
 
-                logger.info(f"App instalada correctamente en location: {location_id}")
-                return Response({"message": "App instalada con éxito. Agencia creada.", "location_id": location_id}, status=200)
+                return Response({"message": "App instalada. Agencia lista.", "location_id": location_id}, status=200)
             
-            logger.error(f"Error en OAuth GHL: {tokens}")
+            logger.error(f"Error OAuth GHL: {tokens}")
             return Response(tokens, status=400)
 
         except Exception as e:
-            logger.error(f"Excepción critica en OAuth: {str(e)}")
+            logger.error(f"Excepción OAuth: {str(e)}")
             return Response({"error": str(e)}, status=500)
 
 
 # -------------------------------------------------------------------------
-# PARTE 2: TU LÓGICA DE NEGOCIO (Webhooks)
+# VISTA 2: WEBHOOK PROPIEDAD (Custom Object Trigger)
 # -------------------------------------------------------------------------
-
 class WebhookPropiedadView(APIView):
-    """
-    Endpoint para Crear/Actualizar/Borrar Propiedades desde GHL.
-    """
     authentication_classes = []
     permission_classes = []
 
     def post(self, request):
         data = request.data
-        logger.info(f"Propiedad Webhook Data: {data}")
+        logger.info(f"📥 Webhook Propiedad recibido: {data}")
         
-        # 1. Lógica unificada para extraer location_id
+        # 1. Identificar Location
+        custom_data = data.get('customData', {})
         location_data = data.get('location', {})
-        custom_data = data.get('customData', {}) 
-        
         location_id = location_data.get('id') or custom_data.get('location_id')
         
         if not location_id:
             return Response({'error': 'Missing location_id'}, status=status.HTTP_400_BAD_REQUEST)
             
-        # IMPORTANTE: Busca la agencia creada por el OAuth de arriba
         agencia = get_object_or_404(Agencia, location_id=location_id)
         
-        # Extraemos IDs
-        ghl_contact_id = custom_data.get('contact_id') or data.get('contact_id') or data.get('id')
-        action = data.get('type', 'update')
+        # 2. Identificar ID del Objeto Propiedad
+        ghl_record_id = custom_data.get('contact_id') or data.get('id')
+        if not ghl_record_id:
+             return Response({'error': 'Missing Record ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not ghl_contact_id:
-            return Response({'error': 'Missing contact_id'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if action == 'delete':
-            deleted, _ = Propiedad.objects.filter(agencia=agencia, ghl_contact_id=ghl_contact_id).delete()
-            return Response({'status': 'deleted', 'count': deleted})
-
-        # Preparar datos (con saneamiento básico de precio)
-        try:
-            precio_raw = custom_data.get('precio') or data.get('precio') or 0
-            # Limpieza simple por si viene "$100,000"
-            precio_clean = float(str(precio_raw).replace(',', '').replace('$', ''))
-        except ValueError:
-            precio_clean = 0
-
+        # 3. Preparar Datos para Django
         prop_data = {
             'agencia': agencia.pk,
-            'ghl_contact_id': ghl_contact_id,
-            'precio': precio_clean,
+            'ghl_contact_id': ghl_record_id,
+            'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
+            'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
             'zona': custom_data.get('zona') or data.get('zona'),
-            'habitaciones': custom_data.get('habitaciones') or data.get('habitaciones'),
-            'estado': 'activo'
+            'estado': 'activo' # Asumimos activo al crearse/actualizarse
         }
         
-        try:
-            propiedad = Propiedad.objects.get(agencia=agencia, ghl_contact_id=ghl_contact_id)
-            serializer = PropiedadSerializer(propiedad, data=prop_data)
-        except Propiedad.DoesNotExist:
-            serializer = PropiedadSerializer(data=prop_data)
+        # 4. Guardar/Actualizar Propiedad Localmente
+        propiedad, created = Propiedad.objects.update_or_create(
+            agencia=agencia, 
+            ghl_contact_id=ghl_record_id, 
+            defaults=prop_data
+        )
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response({'status': 'success', 'data': serializer.data}, status=status.HTTP_200_OK)
+        # -------------------------------------------------------
+        # LOGICA DE MATCHING: Propiedad Nueva -> Busca Clientes
+        # -------------------------------------------------------
         
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Buscamos clientes que:
+        # a) Sean de la misma agencia
+        # b) Quieran la misma zona
+        # c) Tengan presupuesto suficiente (>= precio propiedad)
+        # d) Busquen <= habitaciones que las que tiene esta propiedad
+        clientes_match = Cliente.objects.filter(
+            agencia=agencia,
+            zona_interes__iexact=propiedad.zona,
+            presupuesto_maximo__gte=propiedad.precio,
+            habitaciones_minimas__lte=propiedad.habitaciones 
+        )
+
+        matches_synced = 0
+        
+        if clientes_match.exists():
+            # Obtener token para sincronizar con GHL
+            try:
+                token_obj = GHLToken.objects.get(location_id=location_id)
+                access_token = token_obj.access_token
+                # TODO: Aquí deberías verificar si el token expiró y refrescarlo si es necesario
+            except GHLToken.DoesNotExist:
+                logger.warning(f"⚠️ No hay token para {location_id}. Se guardó local pero no se sincronizó.")
+                return Response({'status': 'saved_local', 'matches': 0}, status=200)
+
+            for cliente in clientes_match:
+                # 1. Guardar relación en Django (Historial Many-to-Many)
+                cliente.propiedades_interes.add(propiedad)
+                
+                # 2. Llamada API a GHL
+                success = ghl_associate_records(
+                    access_token=access_token,
+                    record_id_1=propiedad.ghl_contact_id, # Custom Object ID
+                    record_id_2=cliente.ghl_contact_id,   # Contact ID
+                    association_type="contact"
+                )
+                if success:
+                    matches_synced += 1
+
+        return Response({
+            'status': 'success', 
+            'action': 'created' if created else 'updated',
+            'matches_found_and_synced': matches_synced
+        }, status=status.HTTP_200_OK)
 
 
+# -------------------------------------------------------------------------
+# VISTA 3: WEBHOOK CLIENTE (Contact Created/Updated Trigger)
+# -------------------------------------------------------------------------
 class WebhookClienteView(APIView):
-    """
-    Endpoint para Crear/Actualizar Clientes y disparar Matching.
-    """
     authentication_classes = []
     permission_classes = []
 
     def post(self, request):
         data = request.data
-        logger.info(f"Cliente Webhook Data: {data}")
+        logger.info(f"📥 Webhook Cliente recibido: {data}")
         
-        # 1. Lógica unificada para extraer location_id
+        # 1. Identificar Location
+        custom_data = data.get('customData', {}) # Campos custom están aquí
         location_data = data.get('location', {})
-        custom_data = data.get('customData', {}) 
-        
         location_id = location_data.get('id') or custom_data.get('location_id')
     
         if not location_id:
@@ -164,59 +203,78 @@ class WebhookClienteView(APIView):
             
         agencia = get_object_or_404(Agencia, location_id=location_id)
         
-        # Extraemos IDs
-        ghl_contact_id = custom_data.get('contact_id') or data.get('contact_id') or data.get('id')
-        
+        # 2. Identificar ID del Contacto
+        ghl_contact_id = data.get('id') # En contact update, el ID suele venir en la raíz
         if not ghl_contact_id:
-            return Response({'error': 'Missing contact_id'}, status=status.HTTP_400_BAD_REQUEST)
+             return Response({'error': 'Missing Contact ID'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Preparar datos del cliente
-        try:
-            presupuesto_raw = custom_data.get('presupuesto') or 0
-            presupuesto_clean = float(str(presupuesto_raw).replace(',', '').replace('$', ''))
-        except ValueError:
-            presupuesto_clean = 0
-
+        # 3. Preparar Datos Cliente
+        # Nota: Asegúrate que los keys coincidan con como GHL envía tus Custom Fields (ej. 'presupuesto_maximo')
         cliente_data = {
             'agencia': agencia.pk,
             'ghl_contact_id': ghl_contact_id,
-            'nombre': data.get('first_name') or data.get('full_name') or 'Unknown',
-            'presupuesto_maximo': presupuesto_clean,
+            'nombre': f"{data.get('first_name', '')} {data.get('last_name', '')}".strip(),
+            'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
+            'habitaciones_minimas': clean_int(custom_data.get('habitaciones') or data.get('habitaciones_min')),
             'zona_interes': custom_data.get('zona_interes')        
         }
 
-        try:
-            cliente = Cliente.objects.get(agencia=agencia, ghl_contact_id=ghl_contact_id)
-            serializer = ClienteSerializer(cliente, data=cliente_data)
-        except Cliente.DoesNotExist:
-            serializer = ClienteSerializer(data=cliente_data)
+        # 4. Guardar/Actualizar Cliente Localmente
+        cliente, created = Cliente.objects.update_or_create(
+            agencia=agencia, 
+            ghl_contact_id=ghl_contact_id, 
+            defaults=cliente_data
+        )
 
-        if serializer.is_valid():
-            cliente = serializer.save()
-            
-            # Disparar lógica de Matching
-            coincidencias = self.encontrar_coincidencias(cliente)
-            
-            matches_serializer = PropiedadSerializer(coincidencias, many=True)
-
-            return Response({
-                'status': 'success',
-                'cliente_id': cliente.id,
-                'matches_found': len(coincidencias),
-                'matches': matches_serializer.data
-            })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def encontrar_coincidencias(self, cliente):
-        # Nota: Asegúrate que cliente.zona_interes no sea None antes de filtrar
+        # -------------------------------------------------------
+        # LOGICA DE MATCHING: Cliente Nuevo -> Busca Propiedades
+        # -------------------------------------------------------
+        
         if not cliente.zona_interes:
-            return Propiedad.objects.none()
+            # Si no ha definido zona, difícilmente hacemos match. Retornamos early.
+            return Response({'status': 'saved_no_zone'}, status=200)
 
-        budget = cliente.presupuesto_maximo if cliente.presupuesto_maximo else 999999999
-
-        return Propiedad.objects.filter(
-            agencia=cliente.agencia,
+        # Buscamos propiedades que:
+        # a) Sean de la misma agencia
+        # b) Estén en la zona de interés
+        # c) Tengan precio <= presupuesto del cliente
+        # d) Tengan >= habitaciones que las que pide el cliente
+        propiedades_match = Propiedad.objects.filter(
+            agencia=agencia,
             zona__iexact=cliente.zona_interes,
-            precio__lte=budget, 
+            precio__lte=cliente.presupuesto_maximo,
+            habitaciones__gte=cliente.habitaciones_minimas,
             estado='activo'
         )
+
+        matches_synced = 0
+
+        if propiedades_match.exists():
+            try:
+                token_obj = GHLToken.objects.get(location_id=location_id)
+                access_token = token_obj.access_token
+            except GHLToken.DoesNotExist:
+                logger.warning(f"⚠️ No hay token para {location_id}.")
+                return Response({'status': 'saved_local', 'matches': 0}, status=200)
+
+            for prop in propiedades_match:
+                # 1. Guardar relación en Django (Historial)
+                cliente.propiedades_interes.add(prop)
+                
+                # 2. Llamada API a GHL (Espejo)
+                success = ghl_associate_records(
+                    access_token=access_token,
+                    record_id_1=prop.ghl_contact_id, # Custom Object
+                    record_id_2=cliente.ghl_contact_id, # Contact
+                    association_type="contact"
+                )
+                if success:
+                    matches_synced += 1
+            
+            return Response({
+                'status': 'success', 
+                'matches_found_and_synced': matches_synced,
+                'data_preview': [p.zona for p in propiedades_match]
+            })
+
+        return Response({'status': 'success', 'matches_synced': 0})
