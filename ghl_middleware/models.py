@@ -1,10 +1,11 @@
 from django.db import models
 
 # --- 1. MODELO DE INFRAESTRUCTURA (CRUZADO / OAUTH) ---
+
 class GHLToken(models.Model):
     """
     Guarda los tokens de acceso generados por el Marketplace de GHL.
-    Es vital para validar que la App está instalada legalmente.
+    Es vital para validar que la App está instalada legalmente y para refrescar tokens.
     """
     location_id = models.CharField(max_length=255, primary_key=True, help_text="ID de la subcuenta que instaló la app")
     access_token = models.TextField()
@@ -31,12 +32,11 @@ class Agencia(models.Model):
         primary_key=True, 
         help_text="ID único de la subcuenta de GHL"
     )
-    # Hacemos estos campos opcionales para que la instalación automática (OAuth) no falle
     api_key = models.CharField(
         max_length=255, 
         blank=True, 
         null=True, 
-        help_text="Token de autorización para validar webhooks (Opcional si usas OAuth)"
+        help_text="Token de autorización (Opcional si usas OAuth)"
     )
     nombre = models.CharField(max_length=255, blank=True, null=True)
     active = models.BooleanField(default=True, help_text="Desactiva la agencia si deja de pagar")
@@ -44,9 +44,10 @@ class Agencia(models.Model):
     def __str__(self):
         return f"{self.nombre or 'Agencia Sin Nombre'} ({self.location_id})"
 
+
 class Propiedad(models.Model):
     """
-    Modelo que representa una propiedad inmobiliaria.
+    Representa el Custom Object 'Propiedad' de GHL.
     """
     ESTADO_CHOICES = [
         ('activo', 'Activo'),
@@ -54,34 +55,51 @@ class Propiedad(models.Model):
     ]
 
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='propiedades')
-    ghl_contact_id = models.CharField(max_length=255, help_text="ID del contacto/producto en GHL")
+    ghl_contact_id = models.CharField(max_length=255, help_text="ID del REGISTRO (Record ID) del Custom Object en GHL")
+    
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     zona = models.CharField(max_length=255, db_index=True, blank=True, null=True)
-    habitaciones = models.IntegerField(default=0)
+    habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
     estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='activo')
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
         indexes = [
-            models.Index(fields=['zona', 'precio']),
+            models.Index(fields=['zona', 'precio', 'habitaciones']), # Indexado para búsquedas rápidas
         ]
 
     def __str__(self):
-        return f"Propiedad {self.ghl_contact_id} - {self.zona}"
+        return f"Propiedad {self.ghl_contact_id} - {self.zona} ({self.habitaciones} habs)"
+
 
 class Cliente(models.Model):
     """
-    Modelo que representa un comprador potencial.
+    Representa el Contacto (Buyer Lead) de GHL.
     """
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='clientes')
-    ghl_contact_id = models.CharField(max_length=255, help_text="ID del contacto en GHL")
+    ghl_contact_id = models.CharField(max_length=255, help_text="ID del CONTACTO en GHL")
+    
     nombre = models.CharField(max_length=255, blank=True, default="Desconocido")
     presupuesto_maximo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     zona_interes = models.CharField(max_length=255, blank=True, null=True)
+    
+    # NUEVO CAMPO SOLICITADO:
+    habitaciones_minimas = models.IntegerField(default=0, help_text="Nº mínimo de habitaciones que busca el cliente")
+
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # NUEVO CAMPO DE RELACIÓN (Many-to-Many):
+    # Esto permite guardar qué propiedades se han emparejado con este cliente.
+    # 'blank=True' permite crear clientes sin propiedades asignadas.
+    propiedades_interes = models.ManyToManyField(
+        Propiedad, 
+        related_name='interesados', 
+        blank=True,
+        help_text="Historial de propiedades que hacen match con este cliente"
+    )
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
 
     def __str__(self):
-        return f"Cliente {self.nombre} - {self.agencia.location_id}"
+        return f"Cliente {self.nombre} - Busca {self.habitaciones_minimas} habs en {self.zona_interes}"
