@@ -167,5 +167,9 @@ GHL_SCOPES = [
     'contacts.readonly',
     'contacts.write',
     'locations.readonly',
-    # Agrega más scopes aquí si tu app hace más cosas
+    'associations.readonly',
+    'associations.write',
+    'custom_objects/records.readonly',
+    'custom_objects/records.write',
 ]
+
