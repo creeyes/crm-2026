@@ -13,6 +13,12 @@ from .tasks import sync_associations_background
 
 logger = logging.getLogger(__name__)
 
+# --- HELPER INTERNO: PORTADA ---
+class HomeView(APIView):
+    permission_classes = []
+    def get(self, request):
+        return Response({"message": "Server is running 🚀"}, status=200)
+
 # -------------------------------------------------------------------------
 # HELPER INTERNO: LIMPIEZA DE DATOS
 # -------------------------------------------------------------------------
@@ -92,6 +98,9 @@ class WebhookPropiedadView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    def get(self, request):
+        return Response({"status": "Webhook Propiedad Activo"}, status=200)
+
     def post(self, request):
         data = request.data
         logger.info(f"📥 Webhook Propiedad: {data}")
@@ -110,7 +119,7 @@ class WebhookPropiedadView(APIView):
              return Response({'error': 'Missing Record ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         prop_data = {
-            'agencia': agencia, # <--- CORREGIDO: Pasamos el objeto, no el ID (.pk)
+            'agencia': agencia, 
             'ghl_contact_id': ghl_record_id,
             'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
             'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
@@ -144,6 +153,7 @@ class WebhookPropiedadView(APIView):
                 
                 sync_associations_background(
                     access_token=token_obj.access_token,
+                    location_id=location_id, # <--- ENVIAMOS EL LOCATION ID
                     origin_record_id=propiedad.ghl_contact_id,
                     target_ids_list=target_ids,
                     association_type="contact"
@@ -166,6 +176,9 @@ class WebhookClienteView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    def get(self, request):
+        return Response({"status": "Webhook Cliente Activo"}, status=200)
+
     def post(self, request):
         data = request.data
         logger.info(f"📥 Webhook Cliente: {data}")
@@ -184,7 +197,7 @@ class WebhookClienteView(APIView):
              return Response({'error': 'Missing Contact ID'}, status=status.HTTP_400_BAD_REQUEST)
 
         cliente_data = {
-            'agencia': agencia, # <--- CORREGIDO: Pasamos el objeto, no el ID (.pk)
+            'agencia': agencia, 
             'ghl_contact_id': ghl_contact_id,
             'nombre': f"{data.get('first_name', '')} {data.get('last_name', '')}".strip(),
             'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
@@ -192,7 +205,6 @@ class WebhookClienteView(APIView):
             'zona_interes': custom_data.get('zona_interes')        
         }
 
-        # Aquí es donde daba el error antes
         cliente, created = Cliente.objects.update_or_create(
             agencia=agencia, 
             ghl_contact_id=ghl_contact_id, 
@@ -223,6 +235,7 @@ class WebhookClienteView(APIView):
                 for prop in propiedades_match:
                      sync_associations_background(
                         access_token=token_obj.access_token,
+                        location_id=location_id, # <--- ENVIAMOS EL LOCATION ID
                         origin_record_id=prop.ghl_contact_id, 
                         target_ids_list=[cliente.ghl_contact_id],
                         association_type="contact"
