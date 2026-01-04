@@ -24,8 +24,8 @@ def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, a
     # ------------------------------------------------------------------
     # PASO 1: VERIFICAR SI EL OBJETO EXISTE (Diagnóstico)
     # ------------------------------------------------------------------
-    # CAMBIO CRÍTICO: Usamos 'objects' en vez de 'custom-objects'
-    check_url = f"https://services.leadconnectorhq.com/objects/records/{record_id_1}"
+    # CAMBIO CRÍTICO: Volvemos a 'custom-objects' para API v2 compatible
+    check_url = f"https://services.leadconnectorhq.com/custom-objects/records/{record_id_1}"
     
     try:
         check_response = requests.get(check_url, headers=headers, timeout=5)
@@ -43,8 +43,8 @@ def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, a
     # ------------------------------------------------------------------
     # PASO 2: INTENTAR LA ASOCIACIÓN
     # ------------------------------------------------------------------
-    # CAMBIO CRÍTICO: Usamos 'objects' en vez de 'custom-objects'
-    url = f"https://services.leadconnectorhq.com/objects/records/{record_id_1}/associations"
+    # CAMBIO CRÍTICO: Volvemos a 'custom-objects' para API v2 compatible
+    url = f"https://services.leadconnectorhq.com/custom-objects/records/{record_id_1}/associations"
     
     payload = {
         "recordId": record_id_2,
