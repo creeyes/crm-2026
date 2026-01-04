@@ -22,28 +22,9 @@ def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, a
     }
 
     # ------------------------------------------------------------------
-    # PASO 1: VERIFICAR SI EL OBJETO EXISTE (Diagnóstico)
+    # PASO ÚNICO: INTENTAR LA ASOCIACIÓN (POST)
     # ------------------------------------------------------------------
-    # CAMBIO CRÍTICO: Volvemos a 'custom-objects' para API v2 compatible
-    check_url = f"https://services.leadconnectorhq.com/custom-objects/records/{record_id_1}"
-    
-    try:
-        check_response = requests.get(check_url, headers=headers, timeout=5)
-        if check_response.status_code == 200:
-            logger.info(f"✅ GHL Diagnóstico: La propiedad {record_id_1} EXISTE y es accesible vía API Unificada.")
-        else:
-            logger.error(f"❌ GHL Diagnóstico: No puedo LEER la propiedad en endpoint Unificado. Código: {check_response.status_code}. Resp: {check_response.text}")
-            # Si falla aquí, no tiene sentido intentar asociar
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ Error en Diagnóstico GET: {e}")
-        return False
-
-    # ------------------------------------------------------------------
-    # PASO 2: INTENTAR LA ASOCIACIÓN
-    # ------------------------------------------------------------------
-    # CAMBIO CRÍTICO: Volvemos a 'custom-objects' para API v2 compatible
+    # Usamos el endpoint que GHL reconoce para asociaciones de Custom Objects
     url = f"https://services.leadconnectorhq.com/custom-objects/records/{record_id_1}/associations"
     
     payload = {
