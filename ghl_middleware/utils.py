@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, association_type="contact"):
     """
-    Intenta asociar registros usando el endpoint UNIFICADO (/objects) para coincidir con los nuevos permisos.
+    Asocia registros usando el endpoint ESPECÍFICO DEL SCHEMA (Object Scoped) validado en Postman.
     """
     
     # 1. PAUSA DE SEGURIDAD (Race Condition)
@@ -22,10 +22,11 @@ def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, a
     }
 
     # ------------------------------------------------------------------
-    # PASO ÚNICO: INTENTAR LA ASOCIACIÓN (POST)
+    # CAMBIO CRÍTICO: URL SCOPEADA (Schema ID: 6956b58d47f4c57f79cbe223)
     # ------------------------------------------------------------------
-    # Usamos el endpoint que GHL reconoce para asociaciones de Custom Objects
-    url = f"https://services.leadconnectorhq.com/custom-objects/records/{record_id_1}/associations"
+    # Usamos tu URL base validada y le añadimos /associations al final
+    schema_id = "6956b58d47f4c57f79cbe223"
+    url = f"https://services.leadconnectorhq.com/objects/{schema_id}/records/{record_id_1}/associations"
     
     payload = {
         "recordId": record_id_2,
@@ -39,7 +40,9 @@ def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, a
             logger.info(f"✅ GHL Match Exitoso: Propiedad {record_id_1} <-> Cliente {record_id_2}")
             return True
         else:
-            logger.error(f"❌ Error GHL en ASOCIACIÓN ({response.status_code}): {response.text}")
+            # Agregamos logging del URL para debug si vuelve a fallar
+            logger.error(f"❌ Error GHL ({response.status_code}) en URL: {url}")
+            logger.error(f"Respuesta: {response.text}")
             return False
             
     except requests.exceptions.Timeout:
