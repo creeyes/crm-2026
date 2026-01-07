@@ -1,56 +1,71 @@
-# utils.py
-import requests
-import logging
-import time
-
-logger = logging.getLogger(__name__)
-
-def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, association_type="contact"):
+def ghl_delete_relation_search_and_destroy(access_token, location_id, propiedad_id, contacto_id):
     """
-    Crea la relación Many-to-Many usando el endpoint /relations.
-    Mantiene compatibilidad con la llamada antigua de tasks.py.
-    
-    :param record_id_1: PROPIEDAD (Según tu código original)
-    :param record_id_2: CONTACTO (Según tu código original)
-    :param association_type: Se recibe por compatibilidad, pero usamos el ID fijo interno.
+    Estrategia 'Search & Destroy':
+    1. Busca todas las relaciones del contacto.
+    2. Encuentra la que apunta a la propiedad específica.
+    3. Elimina esa relación usando su ID único.
     """
     
-    # 1. PAUSA DE SEGURIDAD
-    time.sleep(2) 
+    # --- PASO 1: BUSCAR LA RELACIÓN (GET) ---
+    search_url = "https://services.leadconnectorhq.com/associations/relations"
     
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Version": "2021-07-28",
-        "Content-Type": "application/json",
         "Accept": "application/json"
     }
-
-    # URL CORRECTA (Validada en Postman)
-    url = "https://services.leadconnectorhq.com/associations/relations"
     
-    # ID FIJO DE ASOCIACIÓN (Propiedad <-> Contacto)
-    # Lo obtuvimos de tu JSON anterior: "695961c25fba08a4bb06272e"
-    ASSOCIATION_ID = "695961c25fba08a4bb06272e"
-
-    payload = {
+    # Filtramos por el Contacto (First Record) para no traer toda la base de datos
+    params = {
         "locationId": location_id,
-        "associationId": ASSOCIATION_ID,
-        # OJO AL ORDEN (Según tu definición de GHL):
-        # firstRecordId debe ser CONTACTO -> record_id_2
-        # secondRecordId debe ser PROPIEDAD -> record_id_1
-        "firstRecordId": record_id_2,   
-        "secondRecordId": record_id_1  
+        "firstRecordId": contacto_id 
     }
 
+    relation_id_to_delete = None
+
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        # Petición GET para listar
+        response = requests.get(search_url, headers=headers, params=params, timeout=10)
         
-        if response.status_code in [200, 201]:
-            logger.info(f"✅ GHL Match Exitoso: Contacto {record_id_2} <-> Propiedad {record_id_1}")
-            return True
+        if response.status_code == 200:
+            data = response.json()
+            relations = data.get('relations', []) # A veces devuelve lista directa o dentro de clave
+            
+            # Buscamos el Match en memoria
+            for relation in relations:
+                # Verificamos que el "secondRecordId" sea nuestra Propiedad
+                if relation.get('secondRecordId') == propiedad_id:
+                    relation_id_to_delete = relation.get('id')
+                    logger.info(f"🔎 Relación encontrada: {relation_id_to_delete}")
+                    break
         else:
-            logger.error(f"❌ Error GHL ({response.status_code}) creando RELACIÓN: {response.text}")
+            logger.error(f"⚠️ No se pudieron listar relaciones: {response.text}")
             return False
+
+    except Exception as e:
+        logger.error(f"❌ Error buscando relación GHL: {str(e)}")
+        return False
+
+    # --- PASO 2: DESTRUIR LA RELACIÓN (DELETE) ---
+    if relation_id_to_delete:
+        delete_url = f"https://services.leadconnectorhq.com/associations/relations/{relation_id_to_delete}"
+        
+        try:
+            del_response = requests.delete(delete_url, headers=headers, timeout=10)
+            
+            if del_response.status_code in [200, 204]:
+                logger.info(f"🗑️ GHL Relación Eliminada: {contacto_id} -x- {propiedad_id}")
+                return True
+            else:
+                logger.error(f"❌ Error al borrar relación ({del_response.status_code}): {del_response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"❌ Excepción borrando GHL: {str(e)}")
+            return False
+            
+    else:
+        logger.warning(f"⚠️ No se encontró ninguna relación activa entre Contacto {contacto_id} y Propiedad {propiedad_id}")
+        return False
             
     except requests.exceptions.RequestException as e:
         logger.error(f"❌ Excepción de conexión GHL: {str(e)}")
