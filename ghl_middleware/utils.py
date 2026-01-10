@@ -5,14 +5,17 @@ import time
 logger = logging.getLogger(__name__)
 
 # ID FIJO DE ASOCIACIÓN (Propiedad <-> Contacto)
+# Asegúrate de que este ID sea correcto en tu subcuenta de GHL
 ASSOCIATION_TYPE_ID = "695961c25fba08a4bb06272e"
 
 # ---------------------------------------------------------
-# 1. BUSCAR RELACIONES (GET) - CON MANEJO DE ERROR 400
+# 1. OBTENER MAPA DE RELACIONES ACTUALES (BARRIDO DOBLE)
 # ---------------------------------------------------------
-def ghl_get_property_relations(access_token, location_id, property_id):
+def ghl_get_current_associations(access_token, location_id, property_id):
     """
-    Obtiene contactos asociados. Maneja el error 400 como 'Vacío'.
+    Busca todas las conexiones existentes para una propiedad.
+    Devuelve un Diccionario: { contact_id: relation_object }
+    Esto nos permite saber exactamente quién está conectado y cómo.
     """
     time.sleep(0.5)
 
@@ -21,46 +24,58 @@ def ghl_get_property_relations(access_token, location_id, property_id):
         "Version": "2021-07-28",
         "Accept": "application/json"
     }
-
     url = "https://services.leadconnectorhq.com/associations/relations"
     
-    params = {
-        "locationId": location_id,
-        "associationId": ASSOCIATION_TYPE_ID,
-        "secondRecordId": property_id, 
-        "limit": 100 
-    }
+    found_relations_map = {}
 
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            relations = data.get('relations', [])
-            if not relations and 'data' in data:
-                 relations = data.get('data', [])
+    # Definimos las dos direcciones de búsqueda posibles
+    search_params = [
+        {"secondRecordId": property_id}, # Caso A: Propiedad es el Segundo (Estándar)
+        {"firstRecordId": property_id}   # Caso B: Propiedad es el Primero (Raro pero posible)
+    ]
+
+    for params in search_params:
+        params["locationId"] = location_id
+        params["associationId"] = ASSOCIATION_TYPE_ID
+        params["limit"] = 100
+
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=10)
             
-            logger.info(f"🔍 Consulta GHL: Encontrados {len(relations)} contactos en Propiedad {property_id}")
-            return relations
-            
-        elif response.status_code == 400:
-            # SILENCIAR ERROR: 400 significa que no hay nadie asociado.
-            logger.info(f"✨ Consulta GHL: La propiedad {property_id} está vacía (GHL 400).")
-            return []
-            
-        else:
-            logger.error(f"❌ Error buscando relaciones ({response.status_code}): {response.text}")
-            return []
-            
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Excepción buscando relaciones: {str(e)}")
-        return []
+            if response.status_code == 200:
+                data = response.json()
+                relations = data.get('relations', []) or data.get('data', [])
+                
+                for rel in relations:
+                    # Lógica para identificar quién es el CONTACTO en esta relación
+                    r1 = rel.get('firstRecordId')
+                    r2 = rel.get('secondRecordId')
+                    
+                    # El contacto es el ID que NO es la propiedad
+                    contact_id = r1 if r2 == property_id else r2
+                    
+                    if contact_id:
+                        found_relations_map[contact_id] = rel
+
+            elif response.status_code == 400:
+                # 400 en GHL búsqueda significa "No se encontraron resultados", no es error crítico
+                continue 
+
+        except Exception as e:
+            logger.error(f"❌ Error buscando relaciones GHL: {str(e)}")
+
+    logger.info(f"🔍 Mapa Actual: Propiedad {property_id} tiene {len(found_relations_map)} inquilinos.")
+    return found_relations_map
 
 # ---------------------------------------------------------
 # 2. BORRAR RELACIÓN (DELETE)
 # ---------------------------------------------------------
-def ghl_delete_association(access_token, location_id, record_id_1, record_id_2):
-    time.sleep(0.5)
+def ghl_delete_association(access_token, location_id, id_1, id_2):
+    """
+    Borra la asociación entre dos IDs.
+    Intentamos borrar en el orden estándar, si falla, probamos inverso.
+    """
+    time.sleep(0.2) # Pequeña pausa para no saturar
     
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -68,39 +83,39 @@ def ghl_delete_association(access_token, location_id, record_id_1, record_id_2):
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
-
     url = "https://services.leadconnectorhq.com/associations/relations"
 
+    # Intento 1: Orden Estándar
     payload = {
         "locationId": location_id,
         "associationId": ASSOCIATION_TYPE_ID,
-        "firstRecordId": record_id_2,   # Contacto
-        "secondRecordId": record_id_1   # Propiedad
+        "firstRecordId": id_1, 
+        "secondRecordId": id_2 
     }
 
     try:
         response = requests.delete(url, json=payload, headers=headers, timeout=10)
         
-        # 400 aquí también puede significar "Ya borrado"
+        # Si funciona (200 OK o 204 No Content)
         if response.status_code in [200, 204]:
-            logger.info(f"🗑️ Eliminado: Contacto {record_id_2} fuera de Propiedad {record_id_1}")
             return True
-        elif response.status_code in [404, 400]:
-            logger.warning(f"⚠️ Relación ya no existía (GHL {response.status_code}), continuamos.")
-            return True
-        else:
-            logger.error(f"❌ Error borrando ({response.status_code}): {response.text}")
-            return False
+            
+        # Si falla, intentamos invertir los IDs (por si se guardó al revés)
+        payload["firstRecordId"] = id_2
+        payload["secondRecordId"] = id_1
+        response_inv = requests.delete(url, json=payload, headers=headers, timeout=10)
+        
+        return response_inv.status_code in [200, 204]
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Excepción borrando: {str(e)}")
+    except Exception as e:
+        logger.error(f"❌ Excepción borrando asociación: {str(e)}")
         return False
 
 # ---------------------------------------------------------
 # 3. CREAR RELACIÓN (POST)
 # ---------------------------------------------------------
-def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, association_type="contact"):
-    time.sleep(1) 
+def ghl_associate_records(access_token, location_id, property_id, contact_id):
+    time.sleep(0.2)
     
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -108,26 +123,23 @@ def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, a
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
-
     url = "https://services.leadconnectorhq.com/associations/relations"
     
+    # Estandarizamos: Cliente (Primero) <-> Propiedad (Segundo)
     payload = {
         "locationId": location_id,
         "associationId": ASSOCIATION_TYPE_ID,
-        "firstRecordId": record_id_2,   
-        "secondRecordId": record_id_1   
+        "firstRecordId": contact_id,  
+        "secondRecordId": property_id 
     }
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
-        
         if response.status_code in [200, 201]:
-            logger.info(f"✅ Match Exitoso: Contacto {record_id_2} <-> Propiedad {record_id_1}")
             return True
         else:
-            logger.error(f"❌ Error Match ({response.status_code}): {response.text}")
+            logger.error(f"⚠️ Error creando match ({response.status_code}): {response.text}")
             return False
-            
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Excepción Match: {str(e)}")
+    except Exception as e:
+        logger.error(f"❌ Excepción creando match: {str(e)}")
         return False
