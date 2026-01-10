@@ -1,71 +1,54 @@
 import threading
 import logging
-# AQUÍ SÍ: Importamos las funciones desde el otro archivo (utils.py)
-from .utils import ghl_associate_records, ghl_get_property_relations, ghl_delete_association
+from .utils import ghl_associate_records, ghl_get_current_associations, ghl_delete_association
 
 logger = logging.getLogger(__name__)
 
 def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_type="contact"):
     """
-    Sincronización completa:
-    1. LIMPIA (Borra inquilinos antiguos).
-    2. LLENA (Añade nuevos inquilinos).
+    Sincronización Inteligente (Delta Sync):
+    1. Obtiene lo que hay en GHL.
+    2. Compara con lo que debería haber (target_ids_list).
+    3. Solo BORRA lo que sobra y AÑADE lo que falta.
     """
     
     def _worker_process():
-        total_nuevos = len(target_ids_list)
-        logger.info(f"🚀 [Sync] Procesando Propiedad {origin_record_id}. Nuevos candidatos: {total_nuevos}")
+        logger.info(f"🚀 [Sync] Iniciando para Propiedad {origin_record_id}")
         
-        # ---------------------------------------------------------
-        # FASE 1: LIMPIEZA
-        # ---------------------------------------------------------
-        logger.info("🧹 Fase 1: Limpiando relaciones antiguas...")
+        # 1. Obtener estado actual en GHL (Mapa: ID_Contacto -> Info_Relacion)
+        current_map = ghl_get_current_associations(access_token, location_id, origin_record_id)
+        current_ids = set(current_map.keys()) # Convertimos a Conjunto (Set)
         
-        relaciones_actuales = ghl_get_property_relations(access_token, location_id, origin_record_id)
+        # 2. Definir estado deseado (Lo que viene de Django)
+        target_ids = set(target_ids_list)
         
-        borrados = 0
-        if relaciones_actuales:
-            for relacion in relaciones_actuales:
-                # GHL suele devolver: first=Contacto, second=Propiedad
-                id_contacto = relacion.get('firstRecordId')
-                
-                # CORRECCIÓN DE SEGURIDAD:
-                if id_contacto == origin_record_id:
-                    id_contacto = relacion.get('secondRecordId')
+        # 3. Calcular diferencias (Matemática de Conjuntos)
+        ids_to_add = target_ids - current_ids      # Faltan en GHL
+        ids_to_remove = current_ids - target_ids   # Sobran en GHL
+        ids_to_keep = current_ids & target_ids     # Ya están bien (Intersección)
 
-                if id_contacto:
-                    ghl_delete_association(access_token, location_id, origin_record_id, id_contacto)
-                    borrados += 1
+        logger.info(f"📊 Análisis: {len(ids_to_keep)} correctos | {len(ids_to_add)} a añadir | {len(ids_to_remove)} a borrar")
+
+        # 4. Ejecutar BORRADOS (Limpieza)
+        removidos = 0
+        for contact_id in ids_to_remove:
+            # Usamos los IDs exactos que recuperamos de GHL para asegurar el tiro
+            rel_info = current_map.get(contact_id, {})
+            r1 = rel_info.get('firstRecordId') or contact_id
+            r2 = rel_info.get('secondRecordId') or origin_record_id
             
-            logger.info(f"✨ Limpieza: Se eliminaron {borrados} asociaciones.")
-        else:
-            logger.info("✨ Propiedad limpia (sin contactos previos).")
+            if ghl_delete_association(access_token, location_id, r1, r2):
+                removidos += 1
+                logger.info(f"🗑️ [Sync] Eliminado: {contact_id}")
 
-        # ---------------------------------------------------------
-        # FASE 2: ASIGNACIÓN
-        # ---------------------------------------------------------
-        if total_nuevos > 0:
-            logger.info(f"🔗 Fase 2: Creando {total_nuevos} asociaciones...")
-            exitosos = 0
-            fallidos = 0
+        # 5. Ejecutar CREACIONES (Nuevos Matches)
+        agregados = 0
+        for contact_id in ids_to_add:
+            if ghl_associate_records(access_token, location_id, origin_record_id, contact_id):
+                agregados += 1
+                logger.info(f"✅ [Sync] Añadido: {contact_id}")
 
-            for target_id in target_ids_list:
-                resultado = ghl_associate_records(
-                    access_token=access_token,
-                    location_id=location_id,
-                    record_id_1=origin_record_id, # Propiedad
-                    record_id_2=target_id,        # Contacto
-                    association_type=association_type
-                )
-                
-                if resultado:
-                    exitosos += 1
-                else:
-                    fallidos += 1
-            
-            logger.info(f"🏁 [Sync] Finalizado. Éxitos: {exitosos} | Fallos: {fallidos}")
-        else:
-            logger.info("🏁 [Sync] Finalizado. Sin nuevos candidatos. La propiedad queda vacía.")
+        logger.info(f"🏁 [Sync] Finalizado. (+{agregados} / -{removidos})")
 
     # Ejecutar en segundo plano
     task_thread = threading.Thread(target=_worker_process)
