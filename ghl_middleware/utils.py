@@ -1,149 +1,81 @@
-import requests
+import threading
 import logging
-import time
+# Importamos las 3 funciones clave de tu nuevo utils
+from .utils import ghl_associate_records, ghl_get_property_relations, ghl_delete_association
 
 logger = logging.getLogger(__name__)
 
-# ID FIJO DE ASOCIACIÓN (Propiedad <-> Contacto)
-# Lo definimos como constante global para usarlo en todas las funciones.
-ASSOCIATION_TYPE_ID = "695961c25fba08a4bb06272e"
-
-# ---------------------------------------------------------
-# 1. BUSCAR RELACIONES EXISTENTES (¡Nuevo! Necesario para limpiar)
-# ---------------------------------------------------------
-def ghl_get_property_relations(access_token, location_id, property_id):
+def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_type="contact"):
     """
-    Obtiene todos los CONTACTOS asociados actualmente a una PROPIEDAD específica.
-    Devuelve una lista de diccionarios con la info de la relación para poder borrarla.
+    Gestiona la sincronización en segundo plano:
+    1. Revisa quién está conectado actualmente a la propiedad.
+    2. BORRA todas esas conexiones antiguas (Limpieza).
+    3. CREA las nuevas conexiones (si hay nuevos candidatos en target_ids_list).
     """
-    # Pausa de seguridad
-    time.sleep(0.5)
-
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Version": "2021-07-28",
-        "Accept": "application/json"
-    }
-
-    # Endpoint para listar relaciones filtrando por el ID de la propiedad (secondRecordId)
-    url = "https://services.leadconnectorhq.com/associations/relations"
     
-    params = {
-        "locationId": location_id,
-        "associationId": ASSOCIATION_TYPE_ID,
-        "secondRecordId": property_id, # Buscamos todo lo conectado a ESTA propiedad
-        "limit": 100 # Traemos hasta 100 contactos asociados para asegurar limpieza total
-    }
-
-    try:
-        response = requests.get(url, headers=headers, params=params, timeout=10)
+    def _worker_process():
+        total_nuevos = len(target_ids_list)
+        logger.info(f"🚀 [Sync Task] Procesando Propiedad {origin_record_id}. Nuevos candidatos: {total_nuevos}")
         
-        if response.status_code == 200:
-            data = response.json()
-            # La API devuelve la lista dentro de la clave 'relations'
-            relations = data.get('relations', [])
-            logger.info(f"🔍 Consulta GHL: Encontrados {len(relations)} contactos asociados a la propiedad {property_id}")
-            return relations
-        else:
-            logger.error(f"❌ Error buscando relaciones ({response.status_code}): {response.text}")
-            return []
+        # ---------------------------------------------------------
+        # FASE 1: LIMPIEZA DE "ZOMBIES" (Borrar antiguos)
+        # ---------------------------------------------------------
+        logger.info("🧹 Fase 1: Buscando relaciones antiguas para limpiar...")
+        
+        # Consultamos a GHL quién está en la propiedad ahora mismo
+        relaciones_actuales = ghl_get_property_relations(access_token, location_id, origin_record_id)
+        
+        borrados = 0
+        if relaciones_actuales:
+            for relacion in relaciones_actuales:
+                # En tu esquema (utils): 
+                # firstRecordId = CONTACTO
+                # secondRecordId = PROPIEDAD
+                
+                id_contacto_a_borrar = relacion.get('firstRecordId')
+                
+                # Validación extra: Si por error el ID es el mismo que la propiedad, intentamos coger el otro
+                if id_contacto_a_borrar == origin_record_id:
+                    id_contacto_a_borrar = relacion.get('secondRecordId')
+                
+                if id_contacto_a_borrar:
+                    # Ejecutamos el borrado
+                    ghl_delete_association(access_token, location_id, origin_record_id, id_contacto_a_borrar)
+                    borrados += 1
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Excepción buscando relaciones: {str(e)}")
-        return []
-
-# ---------------------------------------------------------
-# 2. BORRAR RELACIÓN (Delete)
-# ---------------------------------------------------------
-def ghl_delete_association(access_token, location_id, record_id_1, record_id_2):
-    """
-    ELIMINA la relación existente entre Propiedad y Contacto.
-    
-    :param record_id_1: PROPIEDAD
-    :param record_id_2: CONTACTO
-    """
-    
-    # Pausa breve
-    time.sleep(0.5)
-    
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Version": "2021-07-28",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-    url = "https://services.leadconnectorhq.com/associations/relations"
-
-    payload = {
-        "locationId": location_id,
-        "associationId": ASSOCIATION_TYPE_ID,
-        # ORDEN CRÍTICO (Igual que al crear):
-        "firstRecordId": record_id_2,   # Contacto
-        "secondRecordId": record_id_1   # Propiedad
-    }
-
-    try:
-        # Usamos DELETE con body (json)
-        response = requests.delete(url, json=payload, headers=headers, timeout=10)
-        
-        # 200 = OK, 204 = No Content (Éxito)
-        if response.status_code in [200, 204]:
-            logger.info(f"🗑️ GHL Eliminación Exitosa: Contacto {record_id_2} desligado de Propiedad {record_id_1}")
-            return True
-        elif response.status_code == 404:
-             # Si no existe, cuenta como borrado
-            logger.warning(f"⚠️ Relación no encontrada para borrar (404), continuamos.")
-            return True
+            logger.info(f"✨ Limpieza completada: Se eliminaron {borrados} asociaciones previas.")
         else:
-            logger.error(f"❌ Error GHL ({response.status_code}) borrando RELACIÓN: {response.text}")
-            return False
+            logger.info("✨ La propiedad estaba limpia (no tenía contactos asociados).")
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Excepción de conexión GHL (DELETE): {str(e)}")
-        return False
+        # ---------------------------------------------------------
+        # FASE 2: ASIGNACIÓN DE NUEVOS (Si aplica)
+        # ---------------------------------------------------------
+        if total_nuevos > 0:
+            logger.info(f"🔗 Fase 2: Creando {total_nuevos} nuevas asociaciones...")
+            exitosos = 0
+            fallidos = 0
 
-# ---------------------------------------------------------
-# 3. CREAR RELACIÓN (Create / Match)
-# ---------------------------------------------------------
-def ghl_associate_records(access_token, location_id, record_id_1, record_id_2, association_type="contact"):
-    """
-    Crea la relación Many-to-Many.
-    
-    :param record_id_1: PROPIEDAD
-    :param record_id_2: CONTACTO
-    """
-    
-    # Pausa de seguridad
-    time.sleep(1) 
-    
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Version": "2021-07-28",
-        "Content-Type": "application/json",
-        "Accept": "application/json"
-    }
-
-    url = "https://services.leadconnectorhq.com/associations/relations"
-    
-    payload = {
-        "locationId": location_id,
-        "associationId": ASSOCIATION_TYPE_ID,
-        # ORDEN CRÍTICO:
-        "firstRecordId": record_id_2,   # Contacto
-        "secondRecordId": record_id_1   # Propiedad
-    }
-
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-        
-        if response.status_code in [200, 201]:
-            logger.info(f"✅ GHL Match Exitoso: Contacto {record_id_2} <-> Propiedad {record_id_1}")
-            return True
-        else:
-            logger.error(f"❌ Error GHL ({response.status_code}) creando RELACIÓN: {response.text}")
-            return False
+            for target_id in target_ids_list:
+                # Creamos la relación nueva
+                resultado = ghl_associate_records(
+                    access_token=access_token,
+                    location_id=location_id,
+                    record_id_1=origin_record_id, # Propiedad
+                    record_id_2=target_id,        # Contacto
+                    association_type=association_type
+                )
+                
+                if resultado:
+                    exitosos += 1
+                else:
+                    fallidos += 1
             
-    except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Excepción de conexión GHL (CREATE): {str(e)}")
-        return False
+            logger.info(f"🏁 [Sync Task] Finalizado. Nuevos añadidos: {exitosos} | Fallos: {fallidos}")
+        else:
+            # Caso importante: Si pusiste 0 habitaciones, la lista viene vacía.
+            # Como ya borramos en la Fase 1, la propiedad queda vacía correctamente.
+            logger.info("🏁 [Sync Task] Finalizado. No hay nuevos candidatos para añadir. La propiedad queda vacía.")
+
+    # Ejecutar en hilo separado para no bloquear el servidor
+    task_thread = threading.Thread(target=_worker_process)
+    task_thread.start()
