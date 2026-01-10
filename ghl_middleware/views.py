@@ -29,7 +29,7 @@ def clean_int(value):
     except ValueError: return 0
 
 # -------------------------------------------------------------------------
-# VISTA 1: OAUTH CALLBACK (Sin cambios mayores, solo mantener imports)
+# VISTA 1: OAUTH CALLBACK
 # -------------------------------------------------------------------------
 class GHLOAuthCallbackView(APIView):
     permission_classes = []
@@ -69,7 +69,7 @@ class GHLOAuthCallbackView(APIView):
             return Response({"error": str(e)}, status=500)
 
 # -------------------------------------------------------------------------
-# VISTA 2: WEBHOOK PROPIEDAD (MODIFICADO)
+# VISTA 2: WEBHOOK PROPIEDAD (CORREGIDO)
 # -------------------------------------------------------------------------
 class WebhookPropiedadView(APIView):
     authentication_classes = []
@@ -107,7 +107,7 @@ class WebhookPropiedadView(APIView):
             defaults=prop_data
         )
 
-        # 1. BUSCAR NUEVOS MATCHES
+        # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
         clientes_match = Cliente.objects.filter(
             agencia=agencia,
             zona_interes__iexact=propiedad.zona,
@@ -116,17 +116,17 @@ class WebhookPropiedadView(APIView):
         )
 
         # 2. ACTUALIZACIÓN LOCAL (DJANGO)
-        # IMPORTANTE: Primero limpiamos las relaciones antiguas de esta propiedad
-        # 'cliente_set' es el nombre por defecto si no definiste related_name en Cliente
-        propiedad.cliente_set.clear() 
+        # CORRECCIÓN AQUÍ: Usamos 'interesados' en lugar de 'cliente_set'
+        propiedad.interesados.clear() 
         
-        # Ahora añadimos SOLO los matches vigentes
+        # Añadimos los matches vigentes
         for cliente in clientes_match:
             cliente.propiedades_interes.add(propiedad)
 
         # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
         matches_count = clientes_match.count()
-        if matches_count >= 0: # Ejecutamos siempre para limpiar si matches_count es 0
+        # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
+        if matches_count >= 0: 
             try:
                 token_obj = GHLToken.objects.get(location_id=location_id)
                 target_ids = [c.ghl_contact_id for c in clientes_match]
@@ -135,7 +135,7 @@ class WebhookPropiedadView(APIView):
                     access_token=token_obj.access_token,
                     location_id=location_id,
                     origin_record_id=propiedad.ghl_contact_id,
-                    target_ids_list=target_ids, # Esta es la lista "Verdadera"
+                    target_ids_list=target_ids, 
                     association_type="contact"
                 )
             except GHLToken.DoesNotExist:
@@ -144,7 +144,7 @@ class WebhookPropiedadView(APIView):
         return Response({'status': 'success', 'matches_found': matches_count})
 
 # -------------------------------------------------------------------------
-# VISTA 3: WEBHOOK CLIENTE (MODIFICADO)
+# VISTA 3: WEBHOOK CLIENTE (CORREGIDO)
 # -------------------------------------------------------------------------
 class WebhookClienteView(APIView):
     authentication_classes = []
@@ -190,28 +190,23 @@ class WebhookClienteView(APIView):
         )
 
         # 2. ACTUALIZACIÓN LOCAL
-        # Borramos las propiedades anteriores del cliente para actualizar su lista
+        # Aquí 'propiedades_interes' SÍ es correcto porque estamos en el modelo Cliente
         cliente.propiedades_interes.clear()
         
         for prop in propiedades_match:
             cliente.propiedades_interes.add(prop)
             
         # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
-        # OJO: Aquí es más complejo porque el SYNC está diseñado "1 Propiedad -> N Clientes".
-        # Si entra un CLIENTE, tenemos que iterar por CADA propiedad que hizo match
-        # y actualizarla a ella.
-        
         matches_count = propiedades_match.count()
         if matches_count > 0:
             try:
                 token_obj = GHLToken.objects.get(location_id=location_id)
                 
-                # Para cada propiedad que coincida, necesitamos recalcular sus inquilinos.
-                # Esto es un poco intensivo pero necesario para la consistencia.
+                # Para cada propiedad que coincida, actualizamos sus inquilinos en GHL
                 for prop in propiedades_match:
-                    # Obtenemos TODOS los clientes interesados en ESTA propiedad específica
-                    # (incluyendo el nuevo cliente que acaba de entrar)
-                    todos_los_interesados = prop.cliente_set.all()
+                    # CORRECCIÓN AQUÍ TAMBIÉN: Usamos 'interesados'
+                    todos_los_interesados = prop.interesados.all()
+                    
                     target_ids = [c.ghl_contact_id for c in todos_los_interesados]
 
                     sync_associations_background(
