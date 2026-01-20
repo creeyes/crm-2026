@@ -152,7 +152,7 @@ class WebhookClienteView(APIView):
 
     def post(self, request):
         data = request.data
-        print("Datos que nos llega de GHL: " + data)
+        print(f"Datos que nos llega de GHL: {data}" )
         logger.info(f"📥 Webhook Cliente: {data}")
         
         custom_data = data.get('customData', {}) 
