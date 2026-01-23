@@ -6,8 +6,9 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import Q
 
-from .models import Agencia, Propiedad, Cliente, GHLToken
+from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,26 @@ def clean_int(value):
     if not value: return 0
     try: return int(float(str(value)))
     except ValueError: return 0
+
+def preferenciasTraductor(value):
+    mapa = {
+        "Si": Cliente.Preferencias.SI,
+        "No": Cliente.Preferencias.NO,
+        "Indiferente": Cliente.Preferencias.IND
+    }
+    return mapa.get(value, Cliente.Preferencias.IND)
+
+def estadoPropTrad(value):
+    mapa = {
+        "Vendido": Propiedad.estadoPiso.VENDIDO,
+        "Activo": Propiedad.estadoPiso.ACTIVO,
+        "No oficial": Propiedad.estadoPiso.NoOficial
+    }
+    return mapa.get(value, Propiedad.estadoPiso.NoOficial)
+
+def listaZonas(value):
+    
+    return
 
 # -------------------------------------------------------------------------
 # VISTA 1: OAUTH CALLBACK
@@ -97,8 +118,12 @@ class WebhookPropiedadView(APIView):
             'ghl_contact_id': ghl_record_id,
             'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
             'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
-            'zona': custom_data.get('zona') or data.get('zona'),
-            'estado': 'activo'
+            'estado': estadoPropTrad(custom_data.get("estado")),
+            'animales': preferenciasTraductor(custom_data.get('animales')),        
+            'metros': clean_int(custom_data.get('metros')),        
+            'balcon': preferenciasTraductor(custom_data.get('balcon')),        
+            'garaje': preferenciasTraductor(custom_data.get('garaje')),
+            'imagenesUrl':custom_data.get('imagenesUrl'),
         }
         
         propiedad, created = Propiedad.objects.update_or_create(
@@ -107,41 +132,56 @@ class WebhookPropiedadView(APIView):
             defaults=prop_data
         )
 
-        # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
-        clientes_match = Cliente.objects.filter(
-            agencia=agencia,
-            zona_interes__iexact=propiedad.zona,
-            presupuesto_maximo__gte=propiedad.precio,
-            habitaciones_minimas__lte=propiedad.habitaciones 
-        )
+        zona = custom_data.get("zona")
+        if (zona):
+            zonaObj = Zona.objects.filter(nombre=zona).first()
+            if (zonaObj):
+                propiedad.zona = zonaObj
+                propiedad.save()
 
-        # 2. ACTUALIZACIÓN LOCAL (DJANGO)
-        # CORRECCIÓN AQUÍ: Usamos 'interesados' en lugar de 'cliente_set'
-        propiedad.interesados.clear() 
-        
-        # Añadimos los matches vigentes
-        for cliente in clientes_match:
-            cliente.propiedades_interes.add(propiedad)
+# Añadir que solo se haga el match si es estado = activo ---------------------------------------------------------------------------------------------------------------------------------------------
+        if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
+            # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
+            clientes_match = Cliente.objects.filter(
+                Q(animales = propiedad.animales) if propiedad.animales != "Indiferente" else Q(),
+                Q(balcon = propiedad.balcon) if propiedad.balcon != "Indiferente" else Q(),
+                Q(garaje = propiedad.garaje) if propiedad.garaje != "Indiferente" else Q(),
 
-        # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
-        matches_count = clientes_match.count()
-        # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
-        if matches_count >= 0: 
-            try:
-                token_obj = GHLToken.objects.get(location_id=location_id)
-                target_ids = [c.ghl_contact_id for c in clientes_match]
-                
-                sync_associations_background(
-                    access_token=token_obj.access_token,
-                    location_id=location_id,
-                    origin_record_id=propiedad.ghl_contact_id,
-                    target_ids_list=target_ids, 
-                    association_type="contact"
-                )
-            except GHLToken.DoesNotExist:
-                logger.warning(f"⚠️ No token for {location_id}")
+                agencia=agencia,
+                zona_interes=propiedad.zona,
+                presupuesto_maximo__gte=propiedad.precio,
+                habitaciones_minimas__lte=propiedad.habitaciones,
+                metros__lte=propiedad.metros
+            ).distinct()
 
-        return Response({'status': 'success', 'matches_found': matches_count})
+            # 2. ACTUALIZACIÓN LOCAL (DJANGO)
+            # CORRECCIÓN AQUÍ: Usamos 'interesados' en lugar de 'cliente_set'
+            propiedad.interesados.clear() 
+            
+            # Añadimos los matches vigentes
+            for cliente in clientes_match:
+                cliente.propiedades_interes.add(propiedad)
+
+            # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
+            matches_count = clientes_match.count()
+            # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
+            if matches_count >= 0: 
+                try:
+                    token_obj = GHLToken.objects.get(location_id=location_id)
+                    target_ids = [c.ghl_contact_id for c in clientes_match]
+                    
+                    sync_associations_background(
+                        access_token=token_obj.access_token,
+                        location_id=location_id,
+                        origin_record_id=propiedad.ghl_contact_id,
+                        target_ids_list=target_ids, 
+                        association_type="contact"
+                    )
+                except GHLToken.DoesNotExist:
+                    logger.warning(f"⚠️ No token for {location_id}")
+
+            return Response({'status': 'success', 'matches_found': matches_count})
+        return Response({'status': 'success'})
 
 # -------------------------------------------------------------------------
 # VISTA 3: WEBHOOK CLIENTE (CORREGIDO)
@@ -152,7 +192,6 @@ class WebhookClienteView(APIView):
 
     def post(self, request):
         data = request.data
-        print(f"Datos que nos llega de GHL: {data}" )
         logger.info(f"📥 Webhook Cliente: {data}")
         
         custom_data = data.get('customData', {}) 
@@ -163,16 +202,18 @@ class WebhookClienteView(APIView):
             
         agencia = get_object_or_404(Agencia, location_id=location_id)
         ghl_contact_id = data.get('id') or custom_data.get('contact_id')
-        
         if not ghl_contact_id: return Response({'error': 'Missing Contact ID'}, status=400)
 
         cliente_data = {
             'agencia': agencia, 
             'ghl_contact_id': ghl_contact_id,
-            'nombre': f"{data.get('first_name', '')} {data.get('last_name', '')}".strip(),
+            'nombre': custom_data.get('full_name'),
             'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
             'habitaciones_minimas': clean_int(custom_data.get('habitaciones') or data.get('habitaciones_min')),
-            'zona_interes': custom_data.get('zona_interes')        
+            'animales': preferenciasTraductor(custom_data.get('animales')),        
+            'metrosMinimo': clean_int(custom_data.get('metros')),        
+            'balcon': preferenciasTraductor(custom_data.get('balcon')),        
+            'garaje': preferenciasTraductor(custom_data.get('garaje')),        
         }
 
         cliente, created = Cliente.objects.update_or_create(
@@ -180,15 +221,28 @@ class WebhookClienteView(APIView):
             ghl_contact_id=ghl_contact_id, 
             defaults=cliente_data
         )
-        
+
+        zona_nombre = custom_data.get("zona_interes")
+        if (zona_nombre):
+            zona_lista = [z.strip() for z in zona_nombre.split(";")]
+            zonas = Zona.objects.filter(nombre__in = zona_lista)
+            cliente.zona_interes.set(zonas)
+            cliente.save()
+
         # 1. BUSCAR MATCHES
         propiedades_match = Propiedad.objects.filter(
+            Q(animales = cliente.animales) if cliente.animales != "Indiferente" else Q(),
+            Q(balcon = cliente.balcon) if cliente.balcon != "Indiferente" else Q(),
+            Q(garaje = cliente.garaje) if cliente.garaje != "Indiferente" else Q(),
+
             agencia=agencia,
-            zona__iexact=cliente.zona_interes,
+            # zona__iexact=cliente.zona_interes,
             precio__lte=cliente.presupuesto_maximo,
             habitaciones__gte=cliente.habitaciones_minimas,
-            estado='activo'
-        )
+            metros__gte = cliente.metrosMinimo,
+            estado='activo',
+            zona__in = cliente.zona_interes.all()
+        ).distinct()
 
         # 2. ACTUALIZACIÓN LOCAL
         # Aquí 'propiedades_interes' SÍ es correcto porque estamos en el modelo Cliente

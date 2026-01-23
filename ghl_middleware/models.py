@@ -44,23 +44,54 @@ class Agencia(models.Model):
     def __str__(self):
         return f"{self.nombre or 'Agencia Sin Nombre'} ({self.location_id})"
 
+class Provincia(models.Model):
+    nombre = models.CharField(max_length=50, unique=True) # Ej: "Barcelona"
+
+    def __str__(self):
+        return self.nombre
+
+class Municipio(models.Model):
+    provincia = models.ForeignKey(Provincia, on_delete=models.CASCADE, related_name="municipios")
+    nombre = models.CharField(max_length=100) # Ej: "Cornellà de Llobregat" o "Barcelona" (ciudad)
+
+    class Meta:
+        unique_together = ('provincia', 'nombre') # Evita duplicar "Madrid" en provincias distintas
+
+    def __str__(self):
+        return f"{self.nombre} ({self.provincia.nombre})"
+
+class Zona(models.Model):
+    municipio = models.ForeignKey(Municipio, on_delete=models.CASCADE, related_name="zonas")
+    nombre = models.CharField(max_length=100) # Ej: "Almeda" o "Gràcia"
+
+    def __str__(self):
+        return self.nombre
 
 class Propiedad(models.Model):
     """
     Representa el Custom Object 'Propiedad' de GHL.
     """
-    ESTADO_CHOICES = [
-        ('activo', 'Activo'),
-        ('vendido', 'Vendido'),
-    ]
+    class Preferencias(models.TextChoices):
+        SI = "si", "Si"
+        NO = "no", "No"
+        IND = "ind", "Indiferente"
+    class estadoPiso(models.TextChoices):
+        ACTIVO = "activo", "Activo"
+        VENDIDO = "vendido", "Vendido"
+        NoOficial = "noficial", "No Oficial"
 
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='propiedades')
     ghl_contact_id = models.CharField(max_length=255, help_text="ID del REGISTRO (Record ID) del Custom Object en GHL")
     
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    zona = models.CharField(max_length=255, db_index=True, blank=True, null=True)
+    zona = models.ForeignKey(Zona, max_length=250, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
     habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
-    estado = models.CharField(max_length=50, choices=ESTADO_CHOICES, default='activo')
+    estado = models.CharField(max_length=10, choices=estadoPiso.choices, default='activo')
+    imagenesUrl = models.CharField(max_length=255,blank=True, null=True)
+    metros = models.IntegerField(default=0)
+    animales = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    balcon = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    garaje = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
@@ -76,19 +107,23 @@ class Cliente(models.Model):
     """
     Representa el Contacto (Buyer Lead) de GHL.
     """
+    class Preferencias(models.TextChoices):
+        SI = "si", "Si"
+        NO = "no", "No"
+        IND = "ind", "Indiferente"
+
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='clientes')
     ghl_contact_id = models.CharField(max_length=255, help_text="ID del CONTACTO en GHL")
-    
     nombre = models.CharField(max_length=255, blank=True, default="Desconocido")
     presupuesto_maximo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    zona_interes = models.CharField(max_length=255, blank=True, null=True)
+    zona_interes = models.ManyToManyField(Zona,max_length=255, blank=True, null=True, related_name="clientes")
     
     # NUEVO CAMPO SOLICITADO:
     habitaciones_minimas = models.IntegerField(default=0, help_text="Nº mínimo de habitaciones que busca el cliente")
 
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # NUEVO CAMPO DE RELACIÓN (Many-to-Many):
+    # NUEVO CAMPO DE RELACIÓN (Many-to-Many): 
     # Esto permite guardar qué propiedades se han emparejado con este cliente.
     # 'blank=True' permite crear clientes sin propiedades asignadas.
     propiedades_interes = models.ManyToManyField(
@@ -97,9 +132,14 @@ class Cliente(models.Model):
         blank=True,
         help_text="Historial de propiedades que hacen match con este cliente"
     )
+    metrosMinimo = models.IntegerField(default=0)
+    animales = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    balcon = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    garaje = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
 
     def __str__(self):
-        return f"Cliente {self.nombre} - Busca {self.habitaciones_minimas} habs en {self.zona_interes}"
+        return f"Cliente {self.nombre}"
