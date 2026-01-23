@@ -154,7 +154,7 @@ class WebhookPropiedadView(APIView):
                 zona_interes=propiedad.zona,
                 presupuesto_maximo__gte=propiedad.precio,
                 habitaciones_minimas__lte=propiedad.habitaciones,
-                metros__lte=propiedad.metros
+                metrosMinimo__lte=propiedad.metros
             ).distinct()
 
             # 2. ACTUALIZACIÓN LOCAL (DJANGO)
@@ -279,4 +279,5 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
 
