@@ -44,7 +44,7 @@ def estadoPropTrad(value):
         "a la venta": Propiedad.estadoPiso.ACTIVO,
         "no es oficial": Propiedad.estadoPiso.NoOficial
     }
-    value = value.lower()
+    value = value.replace("_"," ").lower()
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)
 
 def listaZonas(value):
@@ -279,3 +279,4 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
