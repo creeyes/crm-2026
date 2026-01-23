@@ -40,8 +40,8 @@ def preferenciasTraductor(value):
 def estadoPropTrad(value):
     mapa = {
         "Vendido": Propiedad.estadoPiso.VENDIDO,
-        "Activo": Propiedad.estadoPiso.ACTIVO,
-        "No oficial": Propiedad.estadoPiso.NoOficial
+        "A la venta": Propiedad.estadoPiso.ACTIVO,
+        "No es oficial": Propiedad.estadoPiso.NoOficial
     }
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)
 
@@ -134,7 +134,8 @@ class WebhookPropiedadView(APIView):
 
         zona = custom_data.get("zona")
         if (zona):
-            zonaObj = Zona.objects.filter(nombre=zona).first()
+            zonaLimpio = zona.replace("_"," ").lower().strip()
+            zonaObj = Zona.objects.filter(nombre__iexact=zona).first()
             if (zonaObj):
                 propiedad.zona = zonaObj
                 propiedad.save()
@@ -276,4 +277,3 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
-
