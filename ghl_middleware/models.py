@@ -84,7 +84,7 @@ class Propiedad(models.Model):
     ghl_contact_id = models.CharField(max_length=255, help_text="ID del REGISTRO (Record ID) del Custom Object en GHL")
     
     precio = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    zona = models.ForeignKey(Zona, max_length=250, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
+    zona = models.ForeignKey(Zona, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
     habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
     estado = models.CharField(max_length=10, choices=estadoPiso.choices, default='activo')
     imagenesUrl = models.CharField(max_length=255,blank=True, null=True)
@@ -95,9 +95,6 @@ class Propiedad(models.Model):
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
-        indexes = [
-            models.Index(fields=['zona', 'precio', 'habitaciones']), # Indexado para búsquedas rápidas
-        ]
 
     def __str__(self):
         return f"Propiedad {self.ghl_contact_id} - {self.zona} ({self.habitaciones} habs)"
