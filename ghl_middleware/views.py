@@ -146,9 +146,9 @@ class WebhookPropiedadView(APIView):
         if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
             # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
             clientes_match = Cliente.objects.filter(
-                Q(animales = propiedad.animales) if propiedad.animales != "Indiferente" else Q(),
-                Q(balcon = propiedad.balcon) if propiedad.balcon != "Indiferente" else Q(),
-                Q(garaje = propiedad.garaje) if propiedad.garaje != "Indiferente" else Q(),
+                Q(animales = propiedad.animales) if propiedad.animales != Propiedad.Preferencias.IND else Q(),
+                Q(balcon = propiedad.balcon) if propiedad.balcon != Propiedad.Preferencias.IND else Q(),
+                Q(garaje = propiedad.garaje) if propiedad.garaje != Propiedad.Preferencias.IND else Q(),
 
                 agencia=agencia,
                 zona_interes=propiedad.zona,
@@ -234,9 +234,9 @@ class WebhookClienteView(APIView):
 
         # 1. BUSCAR MATCHES
         propiedades_match = Propiedad.objects.filter(
-            Q(animales = cliente.animales) if cliente.animales != "Indiferente" else Q(),
-            Q(balcon = cliente.balcon) if cliente.balcon != "Indiferente" else Q(),
-            Q(garaje = cliente.garaje) if cliente.garaje != "Indiferente" else Q(),
+            Q(animales = cliente.animales) if cliente.animales != Cliente.Preferencias.IND else Q(),
+            Q(balcon = cliente.balcon) if cliente.balcon != Cliente.Preferencias.IND else Q(),
+            Q(garaje = cliente.garaje) if cliente.garaje != Cliente.Preferencias.IND else Q(),
 
             agencia=agencia,
             # zona__iexact=cliente.zona_interes,
@@ -279,5 +279,3 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
-
-
