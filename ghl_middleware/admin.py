@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Agencia, Propiedad, Cliente, GHLToken
+from .models import Agencia, Propiedad, Cliente, GHLToken, Zona, Municipio, Provincia
 
 # Esto hace que aparezcan en el panel y se vean bonitos con columnas
 
@@ -7,6 +7,9 @@ admin.site.register(Agencia)
 admin.site.register(Propiedad)
 admin.site.register(Cliente)
 admin.site.register(GHLToken)
+admin.site.register(Zona)
+admin.site.register(Municipio)
+admin.site.register(Provincia)
 # @admin.register(Agencia)
 # class AgenciaAdmin(admin.ModelAdmin):
 #     # Agregué 'active' que pusimos en el modelo
