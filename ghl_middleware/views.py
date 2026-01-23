@@ -224,7 +224,7 @@ class WebhookClienteView(APIView):
 
         zona_nombre = custom_data.get("zona_interes")
         if (zona_nombre):
-            zona_lista = [z.strip() for z in zona_nombre.split(";")]
+            zona_lista = [z.strip() for z in zona_nombre.split(",")]
             zonas = Zona.objects.filter(nombre__in = zona_lista)
             cliente.zona_interes.set(zonas)
             cliente.save()
@@ -276,3 +276,4 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
