@@ -31,18 +31,20 @@ def clean_int(value):
 
 def preferenciasTraductor(value):
     mapa = {
-        "Si": Cliente.Preferencias.SI,
-        "No": Cliente.Preferencias.NO,
-        "Indiferente": Cliente.Preferencias.IND
+        "si": Cliente.Preferencias.SI,
+        "no": Cliente.Preferencias.NO,
+        "indiferente": Cliente.Preferencias.IND
     }
+    value = value.lower()
     return mapa.get(value, Cliente.Preferencias.IND)
 
 def estadoPropTrad(value):
     mapa = {
-        "Vendido": Propiedad.estadoPiso.VENDIDO,
-        "A la venta": Propiedad.estadoPiso.ACTIVO,
-        "No es oficial": Propiedad.estadoPiso.NoOficial
+        "vendido": Propiedad.estadoPiso.VENDIDO,
+        "a la venta": Propiedad.estadoPiso.ACTIVO,
+        "no es oficial": Propiedad.estadoPiso.NoOficial
     }
+    value = value.lower()
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)
 
 def listaZonas(value):
