@@ -31,7 +31,7 @@ def clean_int(value):
 
 def preferenciasTraductor1(value):
     mapa = {
-        "si": Cliente.Preferencia1.SI,
+        "si": Cliente.Preferencias1.SI,
         "no": Cliente.Preferencias1.NO,
     }
     value = value.lower()
@@ -290,3 +290,4 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
