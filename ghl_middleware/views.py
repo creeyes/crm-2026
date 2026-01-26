@@ -42,7 +42,7 @@ def preferenciasTraductor2(value):
         "si": Cliente.Preferencias2.SI,
         "indiferente": Cliente.Preferencias2.IND
     }
-    value = value.lower()
+    value = (value or "").lower()
     return mapa.get(value, Cliente.Preferencias2.IND)
 
 def estadoPropTrad(value):
@@ -132,7 +132,7 @@ class WebhookPropiedadView(APIView):
             'metros': clean_int(custom_data.get('metros')),        
             'balcon': preferenciasTraductor1(custom_data.get('balcon')),        
             'garaje': preferenciasTraductor1(custom_data.get('garaje')),
-            'patioInterior': preferenciasTraductor1(custom_data.get('patiointerior')),
+            'patioInterior': preferenciasTraductor1(custom_data.get('patioInterior')),
             'imagenesUrl':guardadorURL(custom_data.get('imagenesUrl')),
         }
         
@@ -290,4 +290,5 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
 
