@@ -71,10 +71,10 @@ class Propiedad(models.Model):
     """
     Representa el Custom Object 'Propiedad' de GHL.
     """
-    class Preferencias(models.TextChoices):
+    class Preferencias1(models.TextChoices):
         SI = "si", "Si"
         NO = "no", "No"
-        IND = "ind", "Indiferente"
+
     class estadoPiso(models.TextChoices):
         ACTIVO = "activo", "Activo"
         VENDIDO = "vendido", "Vendido"
@@ -87,11 +87,12 @@ class Propiedad(models.Model):
     zona = models.ForeignKey(Zona, blank=True, null=True, related_name="propiedades", on_delete=models.SET_NULL)
     habitaciones = models.IntegerField(default=0, help_text="Nº de habitaciones que tiene la propiedad")
     estado = models.CharField(max_length=10, choices=estadoPiso.choices, default='activo')
-    imagenesUrl = models.CharField(max_length=255,blank=True, null=True)
+    imagenesUrl = models.JSONField(default=list)
     metros = models.IntegerField(default=0)
-    animales = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    balcon = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    garaje = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    balcon = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    garaje = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
@@ -104,17 +105,21 @@ class Cliente(models.Model):
     """
     Representa el Contacto (Buyer Lead) de GHL.
     """
-    class Preferencias(models.TextChoices):
+    class Preferencias1(models.TextChoices):
         SI = "si", "Si"
         NO = "no", "No"
+
+    class Preferencias2(models.TextChoices):
+        SI = "si", "Si"
         IND = "ind", "Indiferente"
+
 
     agencia = models.ForeignKey(Agencia, on_delete=models.CASCADE, related_name='clientes')
     ghl_contact_id = models.CharField(max_length=255, help_text="ID del CONTACTO en GHL")
     nombre = models.CharField(max_length=255, blank=True, default="Desconocido")
     presupuesto_maximo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     zona_interes = models.ManyToManyField(Zona,max_length=255, blank=True, null=True, related_name="clientes")
-    
+
     # NUEVO CAMPO SOLICITADO:
     habitaciones_minimas = models.IntegerField(default=0, help_text="Nº mínimo de habitaciones que busca el cliente")
 
@@ -130,10 +135,10 @@ class Cliente(models.Model):
         help_text="Historial de propiedades que hacen match con este cliente"
     )
     metrosMinimo = models.IntegerField(default=0)
-    animales = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    balcon = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    garaje = models.CharField(max_length=3, choices=Preferencias.choices, default=Preferencias.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    
+    animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    balcon = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    garaje = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    patioInterior = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')

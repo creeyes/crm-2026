@@ -29,14 +29,21 @@ def clean_int(value):
     try: return int(float(str(value)))
     except ValueError: return 0
 
-def preferenciasTraductor(value):
+def preferenciasTraductor1(value):
     mapa = {
-        "si": Cliente.Preferencias.SI,
-        "no": Cliente.Preferencias.NO,
-        "indiferente": Cliente.Preferencias.IND
+        "si": Cliente.Preferencia1.SI,
+        "no": Cliente.Preferencias1.NO,
     }
     value = value.lower()
-    return mapa.get(value, Cliente.Preferencias.IND)
+    return mapa.get(value, Cliente.Preferencias1.NO)
+
+def preferenciasTraductor2(value):
+    mapa = {
+        "si": Cliente.Preferencias2.SI,
+        "indiferente": Cliente.Preferencias2.IND
+    }
+    value = value.lower()
+    return mapa.get(value, Cliente.Preferencias2.IND)
 
 def estadoPropTrad(value):
     mapa = {
@@ -47,9 +54,9 @@ def estadoPropTrad(value):
     value = value.replace("_"," ").lower()
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)
 
-def listaZonas(value):
-    
-    return
+def guardadorURL(value):
+    lista = [data.get('url') for data in value if data.get('url')]
+    return lista
 
 # -------------------------------------------------------------------------
 # VISTA 1: OAUTH CALLBACK
@@ -121,11 +128,12 @@ class WebhookPropiedadView(APIView):
             'precio': clean_currency(custom_data.get('precio') or data.get('precio')),
             'habitaciones': clean_int(custom_data.get('habitaciones') or data.get('habitaciones')),
             'estado': estadoPropTrad(custom_data.get("estado")),
-            'animales': preferenciasTraductor(custom_data.get('animales')),        
+            'animales': preferenciasTraductor1(custom_data.get('animales')),        
             'metros': clean_int(custom_data.get('metros')),        
-            'balcon': preferenciasTraductor(custom_data.get('balcon')),        
-            'garaje': preferenciasTraductor(custom_data.get('garaje')),
-            'imagenesUrl':custom_data.get('imagenesUrl'),
+            'balcon': preferenciasTraductor1(custom_data.get('balcon')),        
+            'garaje': preferenciasTraductor1(custom_data.get('garaje')),
+            'patioInterior': preferenciasTraductor1(custom_data.get('patiointerior')),
+            'imagenesUrl':guardadorURL(custom_data.get('imagenesUrl')),
         }
         
         propiedad, created = Propiedad.objects.update_or_create(
@@ -146,9 +154,10 @@ class WebhookPropiedadView(APIView):
         if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
             # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
             clientes_match = Cliente.objects.filter(
-                Q(animales = propiedad.animales) if propiedad.animales != Propiedad.Preferencias.IND else Q(),
-                Q(balcon = propiedad.balcon) if propiedad.balcon != Propiedad.Preferencias.IND else Q(),
-                Q(garaje = propiedad.garaje) if propiedad.garaje != Propiedad.Preferencias.IND else Q(),
+                Q(animales = Cliente.Preferencias1.NO) if propiedad.animales == Propiedad.Preferencias1.NO else Q(),
+                Q(balcon = Cliente.Preferencias2.IND) if propiedad.balcon == Propiedad.Preferencias1.NO else Q(),
+                Q(garaje = Cliente.Preferencias2.IND) if propiedad.garaje == Propiedad.Preferencias1.NO else Q(),
+                Q(patioInterior = Cliente.Preferencias2.IND) if propiedad.patioInterior == Propiedad.Preferencias1.NO else Q(),
 
                 agencia=agencia,
                 zona_interes=propiedad.zona,
@@ -213,10 +222,11 @@ class WebhookClienteView(APIView):
             'nombre': custom_data.get('full_name'),
             'presupuesto_maximo': clean_currency(custom_data.get('presupuesto') or data.get('presupuesto')),
             'habitaciones_minimas': clean_int(custom_data.get('habitaciones') or data.get('habitaciones_min')),
-            'animales': preferenciasTraductor(custom_data.get('animales')),        
+            'animales': preferenciasTraductor1(custom_data.get('animales')),        
             'metrosMinimo': clean_int(custom_data.get('metros')),        
-            'balcon': preferenciasTraductor(custom_data.get('balcon')),        
-            'garaje': preferenciasTraductor(custom_data.get('garaje')),        
+            'balcon': preferenciasTraductor2(custom_data.get('balcon')),        
+            'garaje': preferenciasTraductor2(custom_data.get('garaje')),
+            'patioInterior': peferenciasTraductor2(custom_data.get('patioInterior')), 
         }
 
         cliente, created = Cliente.objects.update_or_create(
@@ -234,9 +244,10 @@ class WebhookClienteView(APIView):
 
         # 1. BUSCAR MATCHES
         propiedades_match = Propiedad.objects.filter(
-            Q(animales = cliente.animales) if cliente.animales != Cliente.Preferencias.IND else Q(),
-            Q(balcon = cliente.balcon) if cliente.balcon != Cliente.Preferencias.IND else Q(),
-            Q(garaje = cliente.garaje) if cliente.garaje != Cliente.Preferencias.IND else Q(),
+            Q(animales = Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias.SI else Q(),
+            Q(balcon = Propiedad.Preferencias.SI) if cliente.balcon == Cliente.Preferencias.SI else Q(),
+            Q(garaje = Propiedad.Preferencias.SI) if cliente.garaje == Cliente.Preferencias.SI else Q(),
+            Q(patioInterior = Propiedad.Preferencias.SI) if cliente.garaje == Cliente.Preferencias.SI else Q(),
 
             agencia=agencia,
             # zona__iexact=cliente.zona_interes,
