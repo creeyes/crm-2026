@@ -228,7 +228,7 @@ class WebhookClienteView(APIView):
             'metrosMinimo': clean_int(custom_data.get('metros')),        
             'balcon': preferenciasTraductor2(custom_data.get('balcon')),        
             'garaje': preferenciasTraductor2(custom_data.get('garaje')),
-            'patioInterior': peferenciasTraductor2(custom_data.get('patioInterior')), 
+            'patioInterior': preferenciasTraductor2(custom_data.get('patioInterior')), 
         }
 
         cliente, created = Cliente.objects.update_or_create(
@@ -292,5 +292,6 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
 
 
