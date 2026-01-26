@@ -145,9 +145,7 @@ class WebhookPropiedadView(APIView):
         zona = custom_data.get("zona")
         if (zona):
             zonaLimpio = zona.replace("_"," ").lower().strip()
-            print(zonaLimpio)
-            zonaObj = Zona.objects.filter(nombre__iexact=zona).first()
-            print(zonaObj)
+            zonaObj = Zona.objects.filter(nombre__iexact=zonaLimpio).first()
             if (zonaObj):
                 propiedad.zona = zonaObj
                 propiedad.save()
@@ -292,3 +290,4 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
