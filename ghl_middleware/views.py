@@ -55,7 +55,9 @@ def estadoPropTrad(value):
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)
 
 def guardadorURL(value):
-    lista = [data.get('url') for data in value if data.get('url')]
+    lista = []
+    if value != "null":
+        lista = [data.get('url') for data in value if data.get('url')]
     return lista
 
 # -------------------------------------------------------------------------
@@ -290,4 +292,5 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
 
