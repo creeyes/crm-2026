@@ -34,7 +34,7 @@ def preferenciasTraductor1(value):
         "si": Cliente.Preferencias1.SI,
         "no": Cliente.Preferencias1.NO,
     }
-    value = value.lower()
+    value = (value or "").lower()
     return mapa.get(value, Cliente.Preferencias1.NO)
 
 def preferenciasTraductor2(value):
@@ -42,7 +42,7 @@ def preferenciasTraductor2(value):
         "si": Cliente.Preferencias2.SI,
         "indiferente": Cliente.Preferencias2.IND
     }
-    value = (value or "").lower()
+    value = value.lower()
     return mapa.get(value, Cliente.Preferencias2.IND)
 
 def estadoPropTrad(value):
@@ -145,7 +145,9 @@ class WebhookPropiedadView(APIView):
         zona = custom_data.get("zona")
         if (zona):
             zonaLimpio = zona.replace("_"," ").lower().strip()
+            print(zonaLimpio)
             zonaObj = Zona.objects.filter(nombre__iexact=zona).first()
+            print(zonaObj)
             if (zonaObj):
                 propiedad.zona = zonaObj
                 propiedad.save()
@@ -290,5 +292,3 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
-
-
