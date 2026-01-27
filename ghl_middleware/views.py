@@ -10,6 +10,7 @@ from django.db.models import Q
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
+from .utils import get_valid_token  # <--- IMPORTANTE: Importamos la función de refresco
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ class GHLOAuthCallbackView(APIView):
             return Response({"error": str(e)}, status=500)
 
 # -------------------------------------------------------------------------
-# VISTA 2: WEBHOOK PROPIEDAD (CORREGIDO)
+# VISTA 2: WEBHOOK PROPIEDAD (CORREGIDO Y CON REFRESH TOKEN)
 # -------------------------------------------------------------------------
 class WebhookPropiedadView(APIView):
     authentication_classes = []
@@ -152,7 +153,7 @@ class WebhookPropiedadView(APIView):
                 propiedad.zona = zonaObj
                 propiedad.save()
 
-# Añadir que solo se haga el match si es estado = activo ---------------------------------------------------------------------------------------------------------------------------------------------
+        # Añadir que solo se haga el match si es estado = activo
         if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
             # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
             clientes_match = Cliente.objects.filter(
@@ -169,7 +170,6 @@ class WebhookPropiedadView(APIView):
             ).distinct()
 
             # 2. ACTUALIZACIÓN LOCAL (DJANGO)
-            # CORRECCIÓN AQUÍ: Usamos 'interesados' en lugar de 'cliente_set'
             propiedad.interesados.clear() 
             
             # Añadimos los matches vigentes
@@ -178,27 +178,30 @@ class WebhookPropiedadView(APIView):
 
             # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
             matches_count = clientes_match.count()
+            
             # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
             if matches_count >= 0: 
-                try:
-                    token_obj = GHLToken.objects.get(location_id=location_id)
+                # NUEVO: Usamos get_valid_token en lugar de leer GHLToken directamente
+                access_token = get_valid_token(location_id)
+                
+                if access_token:
                     target_ids = [c.ghl_contact_id for c in clientes_match]
                     
                     sync_associations_background(
-                        access_token=token_obj.access_token,
+                        access_token=access_token,
                         location_id=location_id,
                         origin_record_id=propiedad.ghl_contact_id,
                         target_ids_list=target_ids, 
                         association_type="contact"
                     )
-                except GHLToken.DoesNotExist:
-                    logger.warning(f"⚠️ No token for {location_id}")
+                else:
+                    logger.warning(f"⚠️ No token valid found for {location_id}")
 
             return Response({'status': 'success', 'matches_found': matches_count})
         return Response({'status': 'success'})
 
 # -------------------------------------------------------------------------
-# VISTA 3: WEBHOOK CLIENTE (CORREGIDO)
+# VISTA 3: WEBHOOK CLIENTE (CORREGIDO Y CON REFRESH TOKEN)
 # -------------------------------------------------------------------------
 class WebhookClienteView(APIView):
     authentication_classes = []
@@ -261,7 +264,6 @@ class WebhookClienteView(APIView):
         ).distinct()
 
         # 2. ACTUALIZACIÓN LOCAL
-        # Aquí 'propiedades_interes' SÍ es correcto porque estamos en el modelo Cliente
         cliente.propiedades_interes.clear()
         
         for prop in propiedades_match:
@@ -270,29 +272,23 @@ class WebhookClienteView(APIView):
         # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
         matches_count = propiedades_match.count()
         if matches_count > 0:
-            try:
-                token_obj = GHLToken.objects.get(location_id=location_id)
-                
+            # NUEVO: Usamos get_valid_token
+            access_token = get_valid_token(location_id)
+
+            if access_token:
                 # Para cada propiedad que coincida, actualizamos sus inquilinos en GHL
                 for prop in propiedades_match:
-                    # CORRECCIÓN AQUÍ TAMBIÉN: Usamos 'interesados'
                     todos_los_interesados = prop.interesados.all()
-                    
                     target_ids = [c.ghl_contact_id for c in todos_los_interesados]
 
                     sync_associations_background(
-                        access_token=token_obj.access_token,
+                        access_token=access_token,
                         location_id=location_id,
                         origin_record_id=prop.ghl_contact_id, 
                         target_ids_list=target_ids,
                         association_type="contact"
                     )
-
-            except GHLToken.DoesNotExist:
-                logger.warning(f"⚠️ No token for {location_id}")
+            else:
+                logger.warning(f"⚠️ No token valid found for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
-
-
-
-
