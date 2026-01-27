@@ -246,10 +246,10 @@ class WebhookClienteView(APIView):
 
         # 1. BUSCAR MATCHES
         propiedades_match = Propiedad.objects.filter(
-            Q(animales = Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias.SI else Q(),
-            Q(balcon = Propiedad.Preferencias.SI) if cliente.balcon == Cliente.Preferencias.SI else Q(),
-            Q(garaje = Propiedad.Preferencias.SI) if cliente.garaje == Cliente.Preferencias.SI else Q(),
-            Q(patioInterior = Propiedad.Preferencias.SI) if cliente.garaje == Cliente.Preferencias.SI else Q(),
+            Q(animales = Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
+            Q(balcon = Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
+            Q(garaje = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
+            Q(patioInterior = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
 
             agencia=agencia,
             # zona__iexact=cliente.zona_interes,
@@ -292,6 +292,7 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
 
 
 
