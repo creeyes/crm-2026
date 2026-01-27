@@ -2,7 +2,7 @@
 import logging
 import requests
 from django.conf import settings
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect # <--- AÑADIDO: redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -60,6 +60,47 @@ def guardadorURL(value):
     if value != "null":
         lista = [data.get('url') for data in value if data.get('url')]
     return lista
+
+# -------------------------------------------------------------------------
+# VISTA NUEVA: LANZADOR DESDE MENU (Custom Menu Link)
+# -------------------------------------------------------------------------
+class GHLLaunchView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        # Recibe el location_id desde el parámetro de la URL del Custom Menu Link
+        location_id = request.query_params.get('location_id')
+        
+        if not location_id:
+            return Response({"error": "No location_id provided. Accede desde el menú de GHL."}, status=400)
+
+        # 1. Verificamos si ya existe la conexión (Token) para esta subcuenta
+        if GHLToken.objects.filter(location_id=location_id).exists():
+            return Response({
+                "status": "Conectado", 
+                "message": f"✅ La agencia {location_id} ya está activa y sincronizada."
+            }, status=200)
+        
+        # 2. Si NO existe, construimos la URL de autorización y redirigimos
+        base_auth_url = "https://marketplace.leadconnectorhq.com/oauth/authorize"
+        client_id = settings.GHL_CLIENT_ID
+        redirect_uri = settings.GHL_REDIRECT_URI
+        # Asegúrate de tener GHL_SCOPES definido en settings.py como una lista de strings
+        scopes = " ".join(settings.GHL_SCOPES) 
+        user_type = "Location"
+        
+        auth_url = (
+            f"{base_auth_url}?"
+            f"client_id={client_id}&"
+            f"redirect_uri={redirect_uri}&"
+            f"scope={scopes}&"
+            f"response_type=code&"
+            f"user_type={user_type}"
+        )
+        
+        # Redirección automática a la pantalla de "Allow" de GHL
+        return redirect(auth_url)
 
 # -------------------------------------------------------------------------
 # VISTA 1: OAUTH CALLBACK
@@ -292,3 +333,4 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token valid found for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
