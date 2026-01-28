@@ -40,6 +40,14 @@ class Agencia(models.Model):
     )
     nombre = models.CharField(max_length=255, blank=True, null=True)
     active = models.BooleanField(default=True, help_text="Desactiva la agencia si deja de pagar")
+    
+    # NUEVO: Campo para que cada agencia tenga su propio ID de asociación de GHL
+    association_type_id = models.CharField(
+        max_length=255, 
+        blank=True, 
+        null=True, 
+        help_text="ID de asociación dinámico para esta subcuenta (vía GHL API)"
+    )
 
     def __str__(self):
         return f"{self.nombre or 'Agencia Sin Nombre'} ({self.location_id})"
@@ -89,10 +97,10 @@ class Propiedad(models.Model):
     estado = models.CharField(max_length=10, choices=estadoPiso.choices, default='activo')
     imagenesUrl = models.JSONField(default=list)
     metros = models.IntegerField(default=0)
-    animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    balcon = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    garaje = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO)
+    balcon = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO)
+    garaje = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO)
+    patioInterior = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO)
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
@@ -118,16 +126,11 @@ class Cliente(models.Model):
     ghl_contact_id = models.CharField(max_length=255, help_text="ID del CONTACTO en GHL")
     nombre = models.CharField(max_length=255, blank=True, default="Desconocido")
     presupuesto_maximo = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    zona_interes = models.ManyToManyField(Zona,max_length=255, blank=True, null=True, related_name="clientes")
+    zona_interes = models.ManyToManyField(Zona, max_length=255, blank=True, null=True, related_name="clientes")
 
-    # NUEVO CAMPO SOLICITADO:
     habitaciones_minimas = models.IntegerField(default=0, help_text="Nº mínimo de habitaciones que busca el cliente")
-
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # NUEVO CAMPO DE RELACIÓN (Many-to-Many): 
-    # Esto permite guardar qué propiedades se han emparejado con este cliente.
-    # 'blank=True' permite crear clientes sin propiedades asignadas.
     propiedades_interes = models.ManyToManyField(
         Propiedad, 
         related_name='interesados', 
@@ -135,10 +138,10 @@ class Cliente(models.Model):
         help_text="Historial de propiedades que hacen match con este cliente"
     )
     metrosMinimo = models.IntegerField(default=0)
-    animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    balcon = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    garaje = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
-    patioInterior = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND) #Default es el indiferente. A la hora de buscar errores, se ha de tener esto en cuenta.
+    animales = models.CharField(max_length=3, choices=Preferencias1.choices, default=Preferencias1.NO)
+    balcon = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND)
+    garaje = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND)
+    patioInterior = models.CharField(max_length=3, choices=Preferencias2.choices, default=Preferencias2.IND)
 
     class Meta:
         unique_together = ('agencia', 'ghl_contact_id')
