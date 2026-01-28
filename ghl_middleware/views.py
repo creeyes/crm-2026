@@ -10,7 +10,7 @@ from django.db.models import Q
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
-from .utils import get_valid_token
+from .utils import get_valid_token  # <--- IMPORTANTE: Importamos la función de refresco
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +93,6 @@ class GHLOAuthCallbackView(APIView):
                         'scope': tokens['scope']
                     }
                 )
-                # Al instalar, creamos la agencia activa.
-                # NOTA: El 'association_type_id' quedará null hasta que lo configures 
-                # manualmente o añadas lógica para obtenerlo de la API de GHL aquí.
                 Agencia.objects.get_or_create(location_id=location_id, defaults={'active': True})
                 return Response({"message": "App instalada.", "location_id": location_id}, status=200)
             logger.error(f"Error OAuth GHL: {tokens}")
@@ -105,7 +102,7 @@ class GHLOAuthCallbackView(APIView):
             return Response({"error": str(e)}, status=500)
 
 # -------------------------------------------------------------------------
-# VISTA 2: WEBHOOK PROPIEDAD
+# VISTA 2: WEBHOOK PROPIEDAD (CORREGIDO Y CON REFRESH TOKEN)
 # -------------------------------------------------------------------------
 class WebhookPropiedadView(APIView):
     authentication_classes = []
@@ -182,12 +179,12 @@ class WebhookPropiedadView(APIView):
             # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
             matches_count = clientes_match.count()
             
-            # Ejecutamos siempre para limpiar si la propiedad dejó de ser atractiva
+            # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
             if matches_count >= 0: 
+                # NUEVO: Usamos get_valid_token en lugar de leer GHLToken directamente
                 access_token = get_valid_token(location_id)
-                association_id = agencia.association_type_id # <--- NUEVO: Obtenemos ID dinámico
                 
-                if access_token and association_id:
+                if access_token:
                     target_ids = [c.ghl_contact_id for c in clientes_match]
                     
                     sync_associations_background(
@@ -195,20 +192,16 @@ class WebhookPropiedadView(APIView):
                         location_id=location_id,
                         origin_record_id=propiedad.ghl_contact_id,
                         target_ids_list=target_ids, 
-                        association_id=association_id, # <--- NUEVO: Pasamos el ID
                         association_type="contact"
                     )
                 else:
-                    if not association_id:
-                        logger.error(f"⚠️ Falta 'association_type_id' en la Agencia {location_id}. Configúralo en el Admin.")
-                    else:
-                        logger.warning(f"⚠️ No token valid found for {location_id}")
+                    logger.warning(f"⚠️ No token valid found for {location_id}")
 
             return Response({'status': 'success', 'matches_found': matches_count})
         return Response({'status': 'success'})
 
 # -------------------------------------------------------------------------
-# VISTA 3: WEBHOOK CLIENTE
+# VISTA 3: WEBHOOK CLIENTE (CORREGIDO Y CON REFRESH TOKEN)
 # -------------------------------------------------------------------------
 class WebhookClienteView(APIView):
     authentication_classes = []
@@ -262,6 +255,7 @@ class WebhookClienteView(APIView):
             Q(patioInterior = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
 
             agencia=agencia,
+            # zona__iexact=cliente.zona_interes,
             precio__lte=cliente.presupuesto_maximo,
             habitaciones__gte=cliente.habitaciones_minimas,
             metros__gte = cliente.metrosMinimo,
@@ -278,10 +272,10 @@ class WebhookClienteView(APIView):
         # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
         matches_count = propiedades_match.count()
         if matches_count > 0:
+            # NUEVO: Usamos get_valid_token
             access_token = get_valid_token(location_id)
-            association_id = agencia.association_type_id # <--- NUEVO: Obtenemos ID dinámico
 
-            if access_token and association_id:
+            if access_token:
                 # Para cada propiedad que coincida, actualizamos sus inquilinos en GHL
                 for prop in propiedades_match:
                     todos_los_interesados = prop.interesados.all()
@@ -292,13 +286,9 @@ class WebhookClienteView(APIView):
                         location_id=location_id,
                         origin_record_id=prop.ghl_contact_id, 
                         target_ids_list=target_ids,
-                        association_id=association_id, # <--- NUEVO: Pasamos el ID
                         association_type="contact"
                     )
             else:
-                if not association_id:
-                    logger.error(f"⚠️ Falta 'association_type_id' en la Agencia {location_id}. Configúralo en el Admin.")
-                else:
-                    logger.warning(f"⚠️ No token valid found for {location_id}")
+                logger.warning(f"⚠️ No token valid found for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
