@@ -8,8 +8,8 @@ from .models import GHLToken
 
 logger = logging.getLogger(__name__)
 
-# ID FIJO DE ASOCIACIÓN
-ASSOCIATION_TYPE_ID = "695961c25fba08a4bb06272e"
+# NOTA: Se ha eliminado ASSOCIATION_TYPE_ID fijo. 
+# Ahora se debe pasar dinámicamente según la agencia.
 
 # --- NUEVAS FUNCIONES PARA TOKEN AUTO-REFRESH ---
 
@@ -121,14 +121,22 @@ def ghl_delete_association(access_token, location_id, relation_id):
         logger.error(f"❌ Excepción DELETE Association: {str(e)}")
         return False
 
-def ghl_associate_records(access_token, location_id, property_id, contact_id):
+# NUEVO: Añadido parámetro 'association_id'
+def ghl_associate_records(access_token, location_id, property_id, contact_id, association_id):
+    """
+    Crea la asociación en GHL. Requiere el association_id específico de la agencia.
+    """
+    if not association_id:
+        logger.error(f"❌ Imposible asociar: No hay association_id para Location {location_id}")
+        return False
+
     time.sleep(0.2)
     headers = { "Authorization": f"Bearer {access_token}", "Version": "2021-07-28", "Content-Type": "application/json", "Accept": "application/json" }
     url = "https://services.leadconnectorhq.com/associations/relations"
     
     payload = {
         "locationId": location_id,
-        "associationId": ASSOCIATION_TYPE_ID,
+        "associationId": association_id, # DATO DINÁMICO
         "firstRecordId": contact_id,  
         "secondRecordId": property_id 
     }
