@@ -3,9 +3,7 @@ from django.urls import path
 from .views import WebhookPropiedadView, WebhookClienteView, GHLOAuthCallbackView
 
 urlpatterns = [
-    # --- 1. RUTA DE ACTIVACIÓN (Custom Menu Link) ---
-    # Esta es la url que pones en el Snapshot: https://tu-dominio.railway.app/api/launch/?location_id={{location.id}}
-    path('launch/', GHLLaunchView.as_view(), name='ghl_launch'),
+    
 
     # --- 2. RUTA OBLIGATORIA PARA INSTALAR LA APP (El Cruzado) ---
     # GHL llamará aquí: https://tu-dominio.railway.app/api/oauth/callback/
@@ -15,4 +13,5 @@ urlpatterns = [
     path('webhooks/propiedad/', WebhookPropiedadView.as_view(), name='webhook_propiedad'),
     path('webhooks/cliente/', WebhookClienteView.as_view(), name='webhook_cliente'),
 ]
+
 
