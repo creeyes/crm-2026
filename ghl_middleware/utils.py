@@ -8,9 +8,6 @@ from .models import GHLToken
 
 logger = logging.getLogger(__name__)
 
-# ID FIJO DE ASOCIACIÓN (YA NO SE USA FIJO, SE PASA POR PARÁMETRO)
-# ASSOCIATION_TYPE_ID = "695961c25fba08a4bb06272e"
-
 # --- NUEVAS FUNCIONES PARA TOKEN AUTO-REFRESH ---
 
 def get_valid_token(location_id):
@@ -121,7 +118,6 @@ def ghl_delete_association(access_token, location_id, relation_id):
         logger.error(f"❌ Excepción DELETE Association: {str(e)}")
         return False
 
-# MODIFICADO: Se añade el parámetro 'association_id' al final
 def ghl_associate_records(access_token, location_id, property_id, contact_id, association_id):
     time.sleep(0.2)
     headers = { "Authorization": f"Bearer {access_token}", "Version": "2021-07-28", "Content-Type": "application/json", "Accept": "application/json" }
@@ -139,3 +135,44 @@ def ghl_associate_records(access_token, location_id, property_id, contact_id, as
         return response.status_code in [200, 201]
     except:
         return False
+
+# --- NUEVA FUNCIÓN: AUTO-DETECCIÓN DE ID ---
+def get_association_type_id(access_token, location_id, object_key="propiedad"):
+    """
+    Consulta a GHL todos los tipos de asociación y devuelve el ID que une
+    'contact' con tu custom object (por defecto busca la key 'propiedad').
+    """
+    url = "https://services.leadconnectorhq.com/associations/types"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "2021-07-28",
+        "Accept": "application/json"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params={"locationId": location_id}, timeout=10)
+        if response.status_code == 200:
+            types = response.json().get('associationTypes', [])
+            
+            for t in types:
+                # GHL puede devolver source/target en cualquier orden.
+                # Buscamos match entre 'contact' y tu 'object_key' (ej: 'propiedad')
+                s_key = t.get('sourceKey', '')
+                t_key = t.get('targetKey', '')
+                
+                # Caso 1: Contact -> Propiedad
+                if s_key == 'contact' and t_key == object_key:
+                    return t.get('id')
+                
+                # Caso 2: Propiedad -> Contact
+                if s_key == object_key and t_key == 'contact':
+                    return t.get('id')
+            
+            logger.warning(f"⚠️ No se encontró ID de asociación para 'contact' <-> '{object_key}' en {location_id}")
+            return None
+        else:
+            logger.error(f"❌ Error buscando Association Types: {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"❌ Excepción buscando Association ID: {str(e)}")
+        return None
