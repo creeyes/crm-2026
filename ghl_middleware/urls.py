@@ -1,6 +1,6 @@
 from django.urls import path
 # Importamos también la vista del OAuth (GHLOAuthCallbackView) y la nueva GHLLaunchView
-from .views import WebhookPropiedadView, WebhookClienteView, GHLOAuthCallbackView, HomeView, DebugGHLVie
+from .views import WebhookPropiedadView, WebhookClienteView, GHLOAuthCallbackView, HomeView, DebugGHLView
 
 urlpatterns = [
     
@@ -14,6 +14,7 @@ urlpatterns = [
     path('webhooks/cliente/', WebhookClienteView.as_view(), name='webhook_cliente'),
     path('ghl/debug/', DebugGHLView.as_view(), name='debug_ghl'),
 ]
+
 
 
 
