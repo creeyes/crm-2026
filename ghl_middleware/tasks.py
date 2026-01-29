@@ -4,7 +4,8 @@ from .utils import ghl_associate_records, ghl_get_current_associations, ghl_dele
 
 logger = logging.getLogger(__name__)
 
-def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_type="contact"):
+# MODIFICADO: Se añade 'association_id_val' a los argumentos
+def sync_associations_background(access_token, location_id, origin_record_id, target_ids_list, association_id_val, association_type="contact"):
     
     def _worker_process():
         # 1. Obtener estado actual
@@ -26,7 +27,8 @@ def sync_associations_background(access_token, location_id, origin_record_id, ta
 
         # 4. Añadir faltantes
         for contact_id in ids_to_add:
-            ghl_associate_records(access_token, location_id, origin_record_id, contact_id)
+            # MODIFICADO: Se pasa el ID dinámico a la función de utilidad
+            ghl_associate_records(access_token, location_id, origin_record_id, contact_id, association_id_val)
 
     task_thread = threading.Thread(target=_worker_process)
     task_thread.start()

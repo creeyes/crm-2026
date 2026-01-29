@@ -41,6 +41,15 @@ class Agencia(models.Model):
     nombre = models.CharField(max_length=255, blank=True, null=True)
     active = models.BooleanField(default=True, help_text="Desactiva la agencia si deja de pagar")
 
+    # --- CAMPO IMPRESCINDIBLE AÑADIDO ---
+    association_type_id = models.CharField(
+        max_length=255, 
+        blank=True, 
+        null=True, 
+        help_text="ID de asociación dinámico para esta subcuenta (vía GHL API)"
+    )
+    # ------------------------------------
+
     def __str__(self):
         return f"{self.nombre or 'Agencia Sin Nombre'} ({self.location_id})"
 
