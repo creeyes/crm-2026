@@ -318,67 +318,67 @@ class WebhookClienteView(APIView):
 
         return Response({'status': 'success', 'matches_found': matches_count})
 
+# ghl_middleware/views.py (Solo cambia esta clase al final del archivo)
+
 class DebugGHLView(APIView):
     """
-    HERRAMIENTA DE DIAGNÓSTICO: Muestra qué asociaciones ve GHL realmente.
+    DIAGNÓSTICO V2: Verificar si existen los Custom Objects (Schemas).
     """
-    permission_classes = [] # Abierto para que puedas entrar fácil
+    permission_classes = [] 
 
     def get(self, request):
-        # Pon aquí el ID de la cuenta que falla
+        # El ID de la cuenta que te está dando problemas
         target_location = "A6JzWxltUNrmkOmGlEhH" 
         
-        reporte = {"estado": "Iniciando", "location_id": target_location}
+        reporte = {"estado": "Buscando Objetos...", "location_id": target_location}
         
         try:
             token_obj = GHLToken.objects.filter(location_id=target_location).first()
             if not token_obj:
-                return Response({"error": "No hay token para esta agencia. Reinstala la App primero."}, status=400)
+                return Response({"error": "No hay token. Reinstala la App."}, status=400)
 
-            # 1. Consultar a GHL
-            url = "https://services.leadconnectorhq.com/associations/types"
+            # --- CAMBIO: AHORA BUSCAMOS 'SCHEMAS' (DEFINICIONES DE OBJETOS) ---
+            url = "https://services.leadconnectorhq.com/objects/schemas"
             headers = {
                 "Authorization": f"Bearer {token_obj.access_token}", 
                 "Version": "2021-07-28",
                 "Accept": "application/json"
             }
             
+            # Nota: A veces GHL requiere 'showArchived=true' para verlo todo
             resp = requests.get(url, headers=headers, params={"locationId": target_location})
             
             if resp.status_code == 200:
                 data = resp.json()
-                types = data.get('associationTypes', [])
+                schemas = data.get('schemas', [])
                 
-                # 2. Filtrar lo interesante
-                lista_limpia = []
-                for t in types:
-                    info = f"ID: {t['id']} | DE: {t['sourceKey']} <--> A: {t['targetKey']}"
-                    lista_limpia.append(info)
+                nombres_encontrados = []
+                tiene_propiedad = False
+
+                for s in schemas:
+                    # Guardamos el 'objectKey' que es el nombre interno
+                    nombre = s.get('objectKey')
+                    nombres_encontrados.append(nombre)
                     
-                reporte["asociaciones_encontradas_en_ghl"] = lista_limpia
-                reporte["mensaje"] = "Mira la lista de arriba. ¿Ves 'propiedad' o 'propiedades'? Copia el ID."
+                    if 'prop' in nombre.lower():
+                        tiene_propiedad = True
                 
-                # INTENTO DE REPARACIÓN AUTOMÁTICA EN VIVO
-                # Busca cualquier cosa que contenga 'prop'
-                found_id = None
-                for t in types:
-                    keys = [t['sourceKey'], t['targetKey']]
-                    if 'contact' in keys and any('prop' in k for k in keys):
-                        found_id = t['id']
-                        break
+                reporte["objetos_encontrados"] = nombres_encontrados
                 
-                if found_id:
-                    agencia = Agencia.objects.get(location_id=target_location)
-                    agencia.association_type_id = found_id
-                    agencia.save()
-                    reporte["reparacion"] = f"✅ ¡ARREGLADO! Se ha guardado el ID {found_id} automáticamente."
+                if tiene_propiedad:
+                    reporte["conclusion"] = "✅ El objeto EXISTE. El problema son los PERMISOS (Scopes) de tu App."
+                    reporte["accion"] = "Ve al Marketplace -> Tu App -> Scopes -> Activa 'associations.readonly' y 'associations.write'."
                 else:
-                    reporte["reparacion"] = "❌ No se encontró nada parecido a 'propiedad' en la lista."
+                    reporte["conclusion"] = "❌ El objeto NO EXISTE en esta cuenta."
+                    reporte["accion"] = "Carga el Snapshot con el Custom Object 'Propiedad' en esta subcuenta."
 
             else:
                 reporte["error_ghl"] = resp.text
+                if resp.status_code == 403:
+                    reporte["pista"] = "Error 403 significa que te faltan SCOPES. Revisa 'customObjects.readonly' en el Marketplace."
 
         except Exception as e:
             reporte["error_interno"] = str(e)
 
         return Response(reporte)
+
