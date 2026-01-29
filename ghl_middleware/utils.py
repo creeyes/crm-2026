@@ -125,7 +125,7 @@ def ghl_associate_records(access_token, location_id, property_id, contact_id, as
     
     payload = {
         "locationId": location_id,
-        "associationId": association_id, # <--- AQUÍ SE USA EL ID DINÁMICO
+        "associationId": association_id, 
         "firstRecordId": contact_id,  
         "secondRecordId": property_id 
     }
@@ -136,11 +136,11 @@ def ghl_associate_records(access_token, location_id, property_id, contact_id, as
     except:
         return False
 
-# --- NUEVA FUNCIÓN: AUTO-DETECCIÓN DE ID ---
+# --- NUEVA FUNCIÓN MEJORADA: AUTO-DETECCIÓN INTELIGENTE ---
 def get_association_type_id(access_token, location_id, object_key="propiedad"):
     """
-    Consulta a GHL todos los tipos de asociación y devuelve el ID que une
-    'contact' con tu custom object (por defecto busca la key 'propiedad').
+    Busca el ID de asociación entre Contacto y el Custom Object.
+    MEJORA: Ahora busca 'propiedad', 'propiedades' y 'custom_objects.propiedades'.
     """
     url = "https://services.leadconnectorhq.com/associations/types"
     headers = {
@@ -151,28 +151,48 @@ def get_association_type_id(access_token, location_id, object_key="propiedad"):
     
     try:
         response = requests.get(url, headers=headers, params={"locationId": location_id}, timeout=10)
+        
         if response.status_code == 200:
             types = response.json().get('associationTypes', [])
             
-            for t in types:
-                # GHL puede devolver source/target en cualquier orden.
-                # Buscamos match entre 'contact' y tu 'object_key' (ej: 'propiedad')
-                s_key = t.get('sourceKey', '')
-                t_key = t.get('targetKey', '')
-                
-                # Caso 1: Contact -> Propiedad
-                if s_key == 'contact' and t_key == object_key:
-                    return t.get('id')
-                
-                # Caso 2: Propiedad -> Contact
-                if s_key == object_key and t_key == 'contact':
-                    return t.get('id')
+            # Preparamos los términos de búsqueda (singular, plural, con s)
+            target_singular = object_key.lower()          # propiedad
+            target_plural = target_singular + "es"        # propiedades
             
-            logger.warning(f"⚠️ No se encontró ID de asociación para 'contact' <-> '{object_key}' en {location_id}")
+            logger.info(f"🕵️ Buscando asociación para '{target_singular}' (o plurales) en {location_id}...")
+
+            for t in types:
+                # Obtenemos las keys de ambos lados. GHL usa firstObjectKey/secondObjectKey
+                # pero a veces también sourceKey/targetKey. Revisamos todo por seguridad.
+                keys_found = [
+                    t.get('firstObjectKey', ''),
+                    t.get('secondObjectKey', ''),
+                    t.get('sourceKey', ''),
+                    t.get('targetKey', '')
+                ]
+                # Limpiamos vacíos y pasamos a minúsculas
+                keys_found = [k.lower() for k in keys_found if k]
+                
+                # 1. ¿Hay un contacto involucrado?
+                is_contact = 'contact' in keys_found
+                
+                # 2. ¿Hay una propiedad involucrada? (Buscamos coincidencia parcial)
+                # Esto detectará 'propiedad', 'propiedades' y 'custom_objects.propiedades'
+                is_target = any((target_singular in k) for k in keys_found)
+                
+                if is_contact and is_target:
+                    found_id = t['id']
+                    logger.info(f"✅ ¡EUREKA! ID Encontrado: {found_id}")
+                    return found_id
+            
+            logger.warning(f"⚠️ No se encontró ninguna asociación compatible con '{object_key}'")
             return None
+            
         else:
-            logger.error(f"❌ Error buscando Association Types: {response.text}")
+            # Aquí capturamos el error 400 típico de cuentas nuevas sin uniones previas
+            logger.error(f"❌ Error API GHL al buscar ID ({response.status_code}): {response.text}")
             return None
+
     except Exception as e:
         logger.error(f"❌ Excepción buscando Association ID: {str(e)}")
         return None
