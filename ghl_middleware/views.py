@@ -328,7 +328,7 @@ class DebugGHLView(APIView):
 
     def get(self, request):
         # El ID de la cuenta que te está dando problemas
-        target_location = "A6JzWxltUNrmkOmGlEhH" 
+        target_location = "Qqg3dS8LsYYc0QQGEfVZ" 
         
         reporte = {"estado": "Buscando Objetos...", "location_id": target_location}
         
@@ -381,4 +381,5 @@ class DebugGHLView(APIView):
             reporte["error_interno"] = str(e)
 
         return Response(reporte)
+
 
