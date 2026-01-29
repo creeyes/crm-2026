@@ -1,4 +1,4 @@
-# views.py
+# ghl_middleware/views.py
 import logging
 import requests
 from django.conf import settings
@@ -10,7 +10,7 @@ from django.db.models import Q
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
-from .utils import get_valid_token  # <--- IMPORTANTE: Importamos la función de refresco
+from .utils import get_valid_token
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +52,15 @@ def estadoPropTrad(value):
         "a la venta": Propiedad.estadoPiso.ACTIVO,
         "no es oficial": Propiedad.estadoPiso.NoOficial
     }
-    value = value.replace("_"," ").lower()
+    value = str(value or "").replace("_"," ").lower()
     return mapa.get(value, Propiedad.estadoPiso.NoOficial)
 
 def guardadorURL(value):
     lista = []
-    if value != "null":
-        lista = [data.get('url') for data in value if data.get('url')]
+    if value and value != "null":
+        # Aseguramos que sea iterable
+        if isinstance(value, list):
+            lista = [data.get('url') for data in value if isinstance(data, dict) and data.get('url')]
     return lista
 
 # -------------------------------------------------------------------------
@@ -102,7 +104,7 @@ class GHLOAuthCallbackView(APIView):
             return Response({"error": str(e)}, status=500)
 
 # -------------------------------------------------------------------------
-# VISTA 2: WEBHOOK PROPIEDAD (CORREGIDO Y CON REFRESH TOKEN)
+# VISTA 2: WEBHOOK PROPIEDAD
 # -------------------------------------------------------------------------
 class WebhookPropiedadView(APIView):
     authentication_classes = []
@@ -155,7 +157,7 @@ class WebhookPropiedadView(APIView):
 
         # Añadir que solo se haga el match si es estado = activo
         if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
-            # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio)
+            # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio de TU código)
             clientes_match = Cliente.objects.filter(
                 Q(animales = Cliente.Preferencias1.NO) if propiedad.animales == Propiedad.Preferencias1.NO else Q(),
                 Q(balcon = Cliente.Preferencias2.IND) if propiedad.balcon == Propiedad.Preferencias1.NO else Q(),
@@ -181,7 +183,12 @@ class WebhookPropiedadView(APIView):
             
             # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
             if matches_count >= 0: 
-                # NUEVO: Usamos get_valid_token en lugar de leer GHLToken directamente
+                
+                # --- CAMBIO IMPORTANTE: VALIDAR ID DE ASOCIACIÓN ---
+                if not agencia.association_type_id:
+                    logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id' configurado. Cruzado saltado.")
+                    return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
+
                 access_token = get_valid_token(location_id)
                 
                 if access_token:
@@ -192,7 +199,8 @@ class WebhookPropiedadView(APIView):
                         location_id=location_id,
                         origin_record_id=propiedad.ghl_contact_id,
                         target_ids_list=target_ids, 
-                        association_type="contact"
+                        # AQUI PASAMOS EL ID DE LA BASE DE DATOS:
+                        association_id_val=agencia.association_type_id 
                     )
                 else:
                     logger.warning(f"⚠️ No token valid found for {location_id}")
@@ -201,7 +209,7 @@ class WebhookPropiedadView(APIView):
         return Response({'status': 'success'})
 
 # -------------------------------------------------------------------------
-# VISTA 3: WEBHOOK CLIENTE (CORREGIDO Y CON REFRESH TOKEN)
+# VISTA 3: WEBHOOK CLIENTE
 # -------------------------------------------------------------------------
 class WebhookClienteView(APIView):
     authentication_classes = []
@@ -242,12 +250,13 @@ class WebhookClienteView(APIView):
 
         zona_nombre = custom_data.get("zona_interes")
         if (zona_nombre):
-            zona_lista = [z.strip() for z in zona_nombre.split(",")]
+            # Mejoramos un poco el split por si acaso
+            zona_lista = [z.strip() for z in str(zona_nombre).split(",")]
             zonas = Zona.objects.filter(nombre__in = zona_lista)
             cliente.zona_interes.set(zonas)
             cliente.save()
 
-        # 1. BUSCAR MATCHES
+        # 1. BUSCAR MATCHES (Tu lógica con filtros Q)
         propiedades_match = Propiedad.objects.filter(
             Q(animales = Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
             Q(balcon = Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
@@ -255,7 +264,7 @@ class WebhookClienteView(APIView):
             Q(patioInterior = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
 
             agencia=agencia,
-            # zona__iexact=cliente.zona_interes,
+            # zona__iexact=cliente.zona_interes, # Comentado en tu original
             precio__lte=cliente.presupuesto_maximo,
             habitaciones__gte=cliente.habitaciones_minimas,
             metros__gte = cliente.metrosMinimo,
@@ -272,7 +281,12 @@ class WebhookClienteView(APIView):
         # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
         matches_count = propiedades_match.count()
         if matches_count > 0:
-            # NUEVO: Usamos get_valid_token
+            
+            # --- CAMBIO IMPORTANTE: VALIDAR ID DE ASOCIACIÓN ---
+            if not agencia.association_type_id:
+                logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
+                return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
+
             access_token = get_valid_token(location_id)
 
             if access_token:
@@ -286,7 +300,8 @@ class WebhookClienteView(APIView):
                         location_id=location_id,
                         origin_record_id=prop.ghl_contact_id, 
                         target_ids_list=target_ids,
-                        association_type="contact"
+                        # AQUI PASAMOS EL ID DE LA BASE DE DATOS:
+                        association_id_val=agencia.association_type_id
                     )
             else:
                 logger.warning(f"⚠️ No token valid found for {location_id}")
