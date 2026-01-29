@@ -317,3 +317,68 @@ class WebhookClienteView(APIView):
                 logger.warning(f"⚠️ No token valid found for {location_id}")
 
         return Response({'status': 'success', 'matches_found': matches_count})
+
+class DebugGHLView(APIView):
+    """
+    HERRAMIENTA DE DIAGNÓSTICO: Muestra qué asociaciones ve GHL realmente.
+    """
+    permission_classes = [] # Abierto para que puedas entrar fácil
+
+    def get(self, request):
+        # Pon aquí el ID de la cuenta que falla
+        target_location = "A6JzWxltUNrmkOmGlEhH" 
+        
+        reporte = {"estado": "Iniciando", "location_id": target_location}
+        
+        try:
+            token_obj = GHLToken.objects.filter(location_id=target_location).first()
+            if not token_obj:
+                return Response({"error": "No hay token para esta agencia. Reinstala la App primero."}, status=400)
+
+            # 1. Consultar a GHL
+            url = "https://services.leadconnectorhq.com/associations/types"
+            headers = {
+                "Authorization": f"Bearer {token_obj.access_token}", 
+                "Version": "2021-07-28",
+                "Accept": "application/json"
+            }
+            
+            resp = requests.get(url, headers=headers, params={"locationId": target_location})
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                types = data.get('associationTypes', [])
+                
+                # 2. Filtrar lo interesante
+                lista_limpia = []
+                for t in types:
+                    info = f"ID: {t['id']} | DE: {t['sourceKey']} <--> A: {t['targetKey']}"
+                    lista_limpia.append(info)
+                    
+                reporte["asociaciones_encontradas_en_ghl"] = lista_limpia
+                reporte["mensaje"] = "Mira la lista de arriba. ¿Ves 'propiedad' o 'propiedades'? Copia el ID."
+                
+                # INTENTO DE REPARACIÓN AUTOMÁTICA EN VIVO
+                # Busca cualquier cosa que contenga 'prop'
+                found_id = None
+                for t in types:
+                    keys = [t['sourceKey'], t['targetKey']]
+                    if 'contact' in keys and any('prop' in k for k in keys):
+                        found_id = t['id']
+                        break
+                
+                if found_id:
+                    agencia = Agencia.objects.get(location_id=target_location)
+                    agencia.association_type_id = found_id
+                    agencia.save()
+                    reporte["reparacion"] = f"✅ ¡ARREGLADO! Se ha guardado el ID {found_id} automáticamente."
+                else:
+                    reporte["reparacion"] = "❌ No se encontró nada parecido a 'propiedad' en la lista."
+
+            else:
+                reporte["error_ghl"] = resp.text
+
+        except Exception as e:
+            reporte["error_interno"] = str(e)
+
+        return Response(reporte)
