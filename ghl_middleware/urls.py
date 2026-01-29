@@ -12,6 +12,8 @@ urlpatterns = [
     # --- 3. TUS WEBHOOKS DE NEGOCIO ---
     path('webhooks/propiedad/', WebhookPropiedadView.as_view(), name='webhook_propiedad'),
     path('webhooks/cliente/', WebhookClienteView.as_view(), name='webhook_cliente'),
+    path('ghl/debug/', DebugGHLView.as_view(), name='debug_ghl'),
 ]
+
 
 
