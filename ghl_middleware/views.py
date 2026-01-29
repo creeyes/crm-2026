@@ -1,4 +1,3 @@
-# ghl_middleware/views.py
 import logging
 import requests
 from django.conf import settings
@@ -10,7 +9,8 @@ from django.db.models import Q
 
 from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
-from .utils import get_valid_token
+# IMPORTANTE: AÑADIDA LA NUEVA FUNCIÓN A LOS IMPORTS
+from .utils import get_valid_token, get_association_type_id 
 
 logger = logging.getLogger(__name__)
 
@@ -58,13 +58,12 @@ def estadoPropTrad(value):
 def guardadorURL(value):
     lista = []
     if value and value != "null":
-        # Aseguramos que sea iterable
         if isinstance(value, list):
             lista = [data.get('url') for data in value if isinstance(data, dict) and data.get('url')]
     return lista
 
 # -------------------------------------------------------------------------
-# VISTA 1: OAUTH CALLBACK
+# VISTA 1: OAUTH CALLBACK (MODIFICADA PARA AUTO-DETECTAR ID)
 # -------------------------------------------------------------------------
 class GHLOAuthCallbackView(APIView):
     permission_classes = []
@@ -85,18 +84,39 @@ class GHLOAuthCallbackView(APIView):
             tokens = response.json()
             if response.status_code == 200:
                 location_id = tokens.get('locationId')
+                access_token = tokens['access_token']
+
+                # 1. Guardar/Actualizar Token
                 GHLToken.objects.update_or_create(
                     location_id=location_id,
                     defaults={
-                        'access_token': tokens['access_token'],
+                        'access_token': access_token,
                         'refresh_token': tokens['refresh_token'],
                         'token_type': tokens['token_type'],
                         'expires_in': tokens['expires_in'],
                         'scope': tokens['scope']
                     }
                 )
-                Agencia.objects.get_or_create(location_id=location_id, defaults={'active': True})
-                return Response({"message": "App instalada.", "location_id": location_id}, status=200)
+                
+                # 2. Crear Agencia si no existe
+                agencia, created = Agencia.objects.get_or_create(location_id=location_id, defaults={'active': True})
+                
+                # 3. --- AUTO-DETECCIÓN INTELIGENTE DEL ID DE ASOCIACIÓN ---
+                # Consultamos a GHL para obtener el ID que une Contactos <-> Propiedades
+                # Nota: 'propiedad' es la KEY de tu Custom Object. Ajustalo si es diferente.
+                logger.info(f"🕵️ Buscando ID de asociación para {location_id}...")
+                found_id = get_association_type_id(access_token, location_id, object_key="propiedad")
+                
+                if found_id:
+                    agencia.association_type_id = found_id
+                    agencia.save()
+                    logger.info(f"✅ ID de asociación detectado y guardado: {found_id}")
+                else:
+                    logger.warning(f"⚠️ No se pudo detectar el ID automáticamente. Deberás ponerlo manual.")
+                # ----------------------------------------------------------
+
+                return Response({"message": "App instalada y configurada.", "location_id": location_id}, status=200)
+            
             logger.error(f"Error OAuth GHL: {tokens}")
             return Response(tokens, status=400)
         except Exception as e:
@@ -157,7 +177,7 @@ class WebhookPropiedadView(APIView):
 
         # Añadir que solo se haga el match si es estado = activo
         if (propiedad.estado == Propiedad.estadoPiso.ACTIVO):
-            # 1. BUSCAR NUEVOS MATCHES (Lógica de Negocio de TU código)
+            # 1. BUSCAR NUEVOS MATCHES
             clientes_match = Cliente.objects.filter(
                 Q(animales = Cliente.Preferencias1.NO) if propiedad.animales == Propiedad.Preferencias1.NO else Q(),
                 Q(balcon = Cliente.Preferencias2.IND) if propiedad.balcon == Propiedad.Preferencias1.NO else Q(),
@@ -171,22 +191,18 @@ class WebhookPropiedadView(APIView):
                 metrosMinimo__lte=propiedad.metros
             ).distinct()
 
-            # 2. ACTUALIZACIÓN LOCAL (DJANGO)
+            # 2. ACTUALIZACIÓN LOCAL
             propiedad.interesados.clear() 
-            
-            # Añadimos los matches vigentes
             for cliente in clientes_match:
                 cliente.propiedades_interes.add(propiedad)
 
-            # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
+            # 3. SINCRONIZACIÓN CON GHL
             matches_count = clientes_match.count()
             
-            # Ejecutamos siempre (incluso si count es 0) para limpiar si la propiedad dejó de ser atractiva
             if matches_count >= 0: 
-                
-                # --- CAMBIO IMPORTANTE: VALIDAR ID DE ASOCIACIÓN ---
+                # VALIDAR ID DE ASOCIACIÓN
                 if not agencia.association_type_id:
-                    logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id' configurado. Cruzado saltado.")
+                    logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
                     return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
 
                 access_token = get_valid_token(location_id)
@@ -199,7 +215,6 @@ class WebhookPropiedadView(APIView):
                         location_id=location_id,
                         origin_record_id=propiedad.ghl_contact_id,
                         target_ids_list=target_ids, 
-                        # AQUI PASAMOS EL ID DE LA BASE DE DATOS:
                         association_id_val=agencia.association_type_id 
                     )
                 else:
@@ -250,13 +265,12 @@ class WebhookClienteView(APIView):
 
         zona_nombre = custom_data.get("zona_interes")
         if (zona_nombre):
-            # Mejoramos un poco el split por si acaso
             zona_lista = [z.strip() for z in str(zona_nombre).split(",")]
             zonas = Zona.objects.filter(nombre__in = zona_lista)
             cliente.zona_interes.set(zonas)
             cliente.save()
 
-        # 1. BUSCAR MATCHES (Tu lógica con filtros Q)
+        # 1. BUSCAR MATCHES
         propiedades_match = Propiedad.objects.filter(
             Q(animales = Propiedad.Preferencias1.SI) if cliente.animales == Cliente.Preferencias1.SI else Q(),
             Q(balcon = Propiedad.Preferencias1.SI) if cliente.balcon == Cliente.Preferencias2.SI else Q(),
@@ -264,7 +278,6 @@ class WebhookClienteView(APIView):
             Q(patioInterior = Propiedad.Preferencias1.SI) if cliente.garaje == Cliente.Preferencias2.SI else Q(),
 
             agencia=agencia,
-            # zona__iexact=cliente.zona_interes, # Comentado en tu original
             precio__lte=cliente.presupuesto_maximo,
             habitaciones__gte=cliente.habitaciones_minimas,
             metros__gte = cliente.metrosMinimo,
@@ -274,15 +287,14 @@ class WebhookClienteView(APIView):
 
         # 2. ACTUALIZACIÓN LOCAL
         cliente.propiedades_interes.clear()
-        
         for prop in propiedades_match:
             cliente.propiedades_interes.add(prop)
             
-        # 3. SINCRONIZACIÓN CON GHL (DELTA SYNC)
+        # 3. SINCRONIZACIÓN CON GHL
         matches_count = propiedades_match.count()
         if matches_count > 0:
             
-            # --- CAMBIO IMPORTANTE: VALIDAR ID DE ASOCIACIÓN ---
+            # VALIDAR ID DE ASOCIACIÓN
             if not agencia.association_type_id:
                 logger.warning(f"⚠️ Agencia {location_id} no tiene 'association_type_id'. Cruzado saltado.")
                 return Response({'status': 'warning', 'msg': 'Falta Association ID', 'matches_found': matches_count})
@@ -290,7 +302,6 @@ class WebhookClienteView(APIView):
             access_token = get_valid_token(location_id)
 
             if access_token:
-                # Para cada propiedad que coincida, actualizamos sus inquilinos en GHL
                 for prop in propiedades_match:
                     todos_los_interesados = prop.interesados.all()
                     target_ids = [c.ghl_contact_id for c in todos_los_interesados]
@@ -300,7 +311,6 @@ class WebhookClienteView(APIView):
                         location_id=location_id,
                         origin_record_id=prop.ghl_contact_id, 
                         target_ids_list=target_ids,
-                        # AQUI PASAMOS EL ID DE LA BASE DE DATOS:
                         association_id_val=agencia.association_type_id
                     )
             else:
