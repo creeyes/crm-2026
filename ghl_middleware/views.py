@@ -320,66 +320,7 @@ class WebhookClienteView(APIView):
 
 # ghl_middleware/views.py (Solo cambia esta clase al final del archivo)
 
-class DebugGHLView(APIView):
-    """
-    DIAGNÓSTICO V2: Verificar si existen los Custom Objects (Schemas).
-    """
-    permission_classes = [] 
 
-    def get(self, request):
-        # El ID de la cuenta que te está dando problemas
-        target_location = "Qqg3dS8LsYYc0QQGEfVZ" 
-        
-        reporte = {"estado": "Buscando Objetos...", "location_id": target_location}
-        
-        try:
-            token_obj = GHLToken.objects.filter(location_id=target_location).first()
-            if not token_obj:
-                return Response({"error": "No hay token. Reinstala la App."}, status=400)
 
-            # --- CAMBIO: AHORA BUSCAMOS 'SCHEMAS' (DEFINICIONES DE OBJETOS) ---
-            url = "https://services.leadconnectorhq.com/objects/schemas"
-            headers = {
-                "Authorization": f"Bearer {token_obj.access_token}", 
-                "Version": "2021-07-28",
-                "Accept": "application/json"
-            }
-            
-            # Nota: A veces GHL requiere 'showArchived=true' para verlo todo
-            resp = requests.get(url, headers=headers, params={"locationId": target_location})
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                schemas = data.get('schemas', [])
-                
-                nombres_encontrados = []
-                tiene_propiedad = False
-
-                for s in schemas:
-                    # Guardamos el 'objectKey' que es el nombre interno
-                    nombre = s.get('objectKey')
-                    nombres_encontrados.append(nombre)
-                    
-                    if 'prop' in nombre.lower():
-                        tiene_propiedad = True
-                
-                reporte["objetos_encontrados"] = nombres_encontrados
-                
-                if tiene_propiedad:
-                    reporte["conclusion"] = "✅ El objeto EXISTE. El problema son los PERMISOS (Scopes) de tu App."
-                    reporte["accion"] = "Ve al Marketplace -> Tu App -> Scopes -> Activa 'associations.readonly' y 'associations.write'."
-                else:
-                    reporte["conclusion"] = "❌ El objeto NO EXISTE en esta cuenta."
-                    reporte["accion"] = "Carga el Snapshot con el Custom Object 'Propiedad' en esta subcuenta."
-
-            else:
-                reporte["error_ghl"] = resp.text
-                if resp.status_code == 403:
-                    reporte["pista"] = "Error 403 significa que te faltan SCOPES. Revisa 'customObjects.readonly' en el Marketplace."
-
-        except Exception as e:
-            reporte["error_interno"] = str(e)
-
-        return Response(reporte)
 
 
