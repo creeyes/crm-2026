@@ -11,6 +11,7 @@ from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
 # IMPORTANTE: AÑADIDA LA NUEVA FUNCIÓN A LOS IMPORTS
 from .utils import get_valid_token, get_association_type_id 
+from .models import Provincia
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +321,24 @@ class WebhookClienteView(APIView):
 
 # ghl_middleware/views.py (Solo cambia esta clase al final del archivo)
 
+# Llamada de un formulario para recibir la lista de zonas
 
-
-
+def api_get_zonas_tree(request):
+    provincias = Provincia.objects.prefetch_related('municipios__zonas').all()
+    
+    arbol = []
+    for p in provincias:
+        municipios_p = []
+        for m in p.municipios.all():
+            municipios_p.append({
+                "nombre": m.nombre,
+                "zonas": list(m.zonas.values_list('nombre', flat=True))
+            })
+        arbol.append({
+            "provincia": p.nombre,
+            "municipios": municipios_p
+        })
+    
+    # Envolvemos en un diccionario. safe=True es el valor por defecto.
+    return JsonResponse({"zonas": arbol})
 
