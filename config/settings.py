@@ -35,12 +35,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',  # <--- NUEVO: Librería para permitir conexión desde GHL
     # Tus apps:
     'ghl_middleware', # Tu lógica
     'rest_framework', # Para la API
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', # <--- NUEVO: Debe ir EL PRIMERO
     'django.middleware.security.SecurityMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware", # CRÍTICO: Para CSS en Railway
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -119,9 +121,9 @@ REST_FRAMEWORK = {
 # --- SEGURIDAD EXTRA PARA RAILWAY Y GHL ---
 # Confía en el HTTPS de Railway
 CSRF_TRUSTED_ORIGINS = [
-    'https://api.leadconnectorhq.com', # Para el formulario a pecho descubierto. Si no se usará un formulario solo, este link se borra.
-    'https://widgets.leadconnectorhq.com', # Para el mismo formulario, pero este está metido dentro de una página web. El embeded.
-    'https://app.gohighlevel.com' # Tres cuartos de lo mismo
+    'https://api.leadconnectorhq.com', 
+    'https://widgets.leadconnectorhq.com', 
+    'https://app.gohighlevel.com', # <--- CORREGIDO: Añadida coma que faltaba
     'https://*.railway.app', 
     'https://*.up.railway.app'
 ] 
@@ -164,12 +166,9 @@ GHL_CLIENT_ID = os.environ.get('GHL_CLIENT_ID', '')
 GHL_CLIENT_SECRET = os.environ.get('GHL_CLIENT_SECRET', '')
 
 # URL de redirección (debe coincidir con la del Marketplace)
-# En local: http://localhost:8000/api/oauth/callback/
-# En Prod: https://tu-app.up.railway.app/api/oauth/callback/
 GHL_REDIRECT_URI = os.environ.get('GHL_REDIRECT_URI', 'http://localhost:8000/api/oauth/callback/')
 
-# Scopes: Permisos que pediste al crear la app (separados por espacios si es string, o lista)
-# Ajusta esto según lo que marcaste en el Marketplace.
+# Scopes
 GHL_SCOPES = [
     'contacts.readonly',
     'contacts.write',
@@ -179,6 +178,10 @@ GHL_SCOPES = [
     'custom_objects/records.readonly',
     'custom_objects/records.write',
 ]
+
+# --- NUEVO: PERMISOS CORS PARA GHL ---
+# Esto permite que el navegador acepte peticiones desde los scripts de GHL
+CORS_ALLOW_ALL_ORIGINS = True
 
 
 
