@@ -118,7 +118,12 @@ REST_FRAMEWORK = {
 
 # --- SEGURIDAD EXTRA PARA RAILWAY Y GHL ---
 # Confía en el HTTPS de Railway
-CSRF_TRUSTED_ORIGINS = ['https://*.railway.app', 'https://*.up.railway.app'] 
+CSRF_TRUSTED_ORIGINS = [
+    'https://api.leadconnectorhq.com', # Para el formulario a pecho descubierto. Si no se usará un formulario solo, este link se borra.
+    'https://widgets.leadconnectorhq.com', # Para el mismo formulario, pero este está metido dentro de una página web. El embeded.
+    'https://*.railway.app', 
+    'https://*.up.railway.app'
+] 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Si vas a cargar esta app dentro de un IFRAME en GHL (Custom Menu Link):
@@ -173,5 +178,6 @@ GHL_SCOPES = [
     'custom_objects/records.readonly',
     'custom_objects/records.write',
 ]
+
 
 
