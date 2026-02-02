@@ -121,6 +121,7 @@ REST_FRAMEWORK = {
 CSRF_TRUSTED_ORIGINS = [
     'https://api.leadconnectorhq.com', # Para el formulario a pecho descubierto. Si no se usará un formulario solo, este link se borra.
     'https://widgets.leadconnectorhq.com', # Para el mismo formulario, pero este está metido dentro de una página web. El embeded.
+    'https://app.gohighlevel.com' # Tres cuartos de lo mismo
     'https://*.railway.app', 
     'https://*.up.railway.app'
 ] 
@@ -178,6 +179,7 @@ GHL_SCOPES = [
     'custom_objects/records.readonly',
     'custom_objects/records.write',
 ]
+
 
 
 
