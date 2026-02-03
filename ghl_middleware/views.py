@@ -344,6 +344,7 @@ def api_get_zonas_tree(request):
     return JsonResponse({"zonas": arbol})
 @csrf_exempt
 def registrar_ubicacion(request):
+    print(request)
     nombre_prov = request.POST.get('provincia', '').strip()
     nombre_muni = request.POST.get('municipio', '').strip()
     nombre_zona = request.POST.get('zona', '').strip()
@@ -397,5 +398,6 @@ def registrar_ubicacion(request):
             'message': f'Error en el servidor: {str(e)}'
 
         }, status=500)
+
 
 
