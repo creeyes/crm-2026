@@ -343,3 +343,56 @@ def api_get_zonas_tree(request):
     # Envolvemos en un diccionario. safe=True es el valor por defecto.
     return JsonResponse({"zonas": arbol})
 
+def registrar_ubicacion(request):
+    nombre_prov = request.POST.get('provincia', '').strip()
+    nombre_muni = request.POST.get('municipio', '').strip()
+    nombre_zona = request.POST.get('zona', '').strip()
+
+    if not nombre_prov or not nombre_muni or not nombre_zona:
+        return JsonResponse({
+            'status': 'error', 
+            'message': 'Faltan datos obligatorios. Debes indicar Zona, Municipio y Provincia.'
+        }, status=400)
+
+    try:
+        # 3. Lógica de guardado rastreando si algo es nuevo
+        # Creamos/Buscamos Provincia
+        prov_obj, prov_creada = Provincia.objects.get_or_create(
+            nombre__iexact=nombre_prov, 
+            defaults={'nombre': nombre_prov}
+        )
+
+        # Creamos/Buscamos Municipio (vinculado a esa provincia)
+        muni_obj, muni_creado = Municipio.objects.get_or_create(
+            nombre__iexact=nombre_muni,
+            provincia=prov_obj,
+            defaults={'nombre': nombre_muni}
+        )
+
+        # Creamos/Buscamos Zona (vinculada a ese municipio)
+        zona_obj, zona_creada = Zona.objects.get_or_create(
+            nombre__iexact=nombre_zona,
+            municipio=muni_obj,
+            defaults={'nombre': nombre_zona}
+        )
+
+        # 4. Comprobamos si ALGO es nuevo
+        # Si cualquiera de los tres booleanos es True, significa que hemos "añadido" algo a la DB
+        si_algo_es_nuevo = prov_creada or muni_creado or zona_creada
+
+        if si_algo_es_nuevo:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Se ha creado el registro correctamente'
+            })
+        else:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'No se ha hecho nada (ya existía todo)'
+            })
+
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Error en el servidor: {str(e)}'
+        }, status=500)

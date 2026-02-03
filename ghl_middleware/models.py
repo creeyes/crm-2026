@@ -54,14 +54,14 @@ class Agencia(models.Model):
         return f"{self.nombre or 'Agencia Sin Nombre'} ({self.location_id})"
 
 class Provincia(models.Model):
-    nombre = models.CharField(max_length=50, unique=True) # Ej: "Barcelona"
+    nombre = models.CharField(max_length=50, unique=True, db_index=True) # Ej: "Barcelona"
 
     def __str__(self):
         return self.nombre
 
 class Municipio(models.Model):
     provincia = models.ForeignKey(Provincia, on_delete=models.CASCADE, related_name="municipios")
-    nombre = models.CharField(max_length=100) # Ej: "Cornellà de Llobregat" o "Barcelona" (ciudad)
+    nombre = models.CharField(max_length=100, db_index=True) # Ej: "Cornellà de Llobregat" o "Barcelona" (ciudad)
 
     class Meta:
         unique_together = ('provincia', 'nombre') # Evita duplicar "Madrid" en provincias distintas
@@ -71,7 +71,7 @@ class Municipio(models.Model):
 
 class Zona(models.Model):
     municipio = models.ForeignKey(Municipio, on_delete=models.CASCADE, related_name="zonas")
-    nombre = models.CharField(max_length=100) # Ej: "Almeda" o "Gràcia"
+    nombre = models.CharField(max_length=100, db_index=True) # Ej: "Almeda" o "Gràcia"
 
     def __str__(self):
         return self.nombre

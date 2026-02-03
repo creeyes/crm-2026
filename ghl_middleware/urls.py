@@ -13,7 +13,8 @@ urlpatterns = [
     # --- 3. TUS WEBHOOKS DE NEGOCIO ---
     path('webhooks/propiedad/', WebhookPropiedadView.as_view(), name='webhook_propiedad'),
     path('webhooks/cliente/', WebhookClienteView.as_view(), name='webhook_cliente'),
-    path('webhooks/zonasprovincia/', views.api_get_zonas_tree, name='get_zonas_tree')
+    path('webhooks/zonasprovincia/', views.api_get_zonas_tree, name='get_zonas_tree'),
+    path('webhooks/zonasprovincia/nuevo/', views.registrar_ubicacion, name='add_zonas_tree')
 ]
 
 
