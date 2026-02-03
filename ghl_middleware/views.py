@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Q
 from django.http import JsonResponse
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt
 from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
 # IMPORTANTE: AÑADIDA LA NUEVA FUNCIÓN A LOS IMPORTS
@@ -324,7 +324,7 @@ class WebhookClienteView(APIView):
 
 # Llamada de un formulario para recibir la lista de zonas
 
-@ensure_csrf_cookie
+@csrf_exempt
 def api_get_zonas_tree(request):
     provincias = Provincia.objects.prefetch_related('municipios__zonas').all()
     
@@ -398,3 +398,4 @@ def registrar_ubicacion(request):
             'message': f'Error en el servidor: {str(e)}'
 
         }, status=500)
+
