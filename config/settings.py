@@ -185,6 +185,6 @@ GHL_SCOPES = [
 # Esto permite que el navegador acepte peticiones desde los scripts de GHL
 CORS_ALLOW_ALL_ORIGINS = True
 
-
-
-
+CORS_ALLOW_CREDENTIALS = True
+CSRF_COOKIE_SAMESITE = 'None'  # Permite que la cookie viaje entre dominios
+CSRF_COOKIE_SECURE = True       # Obligatorio si usas 'None'
