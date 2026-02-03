@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     'corsheaders',  # <--- NUEVO: Librería para permitir conexión desde GHL
     # Tus apps:
     'ghl_middleware', # Tu lógica
+    'GHL_Front',      # Frontend/UI de GHL
+    'GHL_RRSS',       # Redes Sociales de GHL
     'rest_framework', # Para la API
 ]
 
