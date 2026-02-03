@@ -324,7 +324,6 @@ class WebhookClienteView(APIView):
 
 # Llamada de un formulario para recibir la lista de zonas
 
-@csrf_exempt
 def api_get_zonas_tree(request):
     provincias = Provincia.objects.prefetch_related('municipios__zonas').all()
     
@@ -343,7 +342,7 @@ def api_get_zonas_tree(request):
     
     # Envolvemos en un diccionario. safe=True es el valor por defecto.
     return JsonResponse({"zonas": arbol})
-
+@csrf_exempt
 def registrar_ubicacion(request):
     nombre_prov = request.POST.get('provincia', '').strip()
     nombre_muni = request.POST.get('municipio', '').strip()
@@ -398,4 +397,5 @@ def registrar_ubicacion(request):
             'message': f'Error en el servidor: {str(e)}'
 
         }, status=500)
+
 
