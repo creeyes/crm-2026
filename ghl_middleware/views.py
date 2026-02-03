@@ -1,5 +1,6 @@
 import logging
 import requests
+import json
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -400,6 +401,7 @@ def registrar_ubicacion(request):
             'message': f'Error en el servidor: {str(e)}'
 
         }, status=500)
+
 
 
 
