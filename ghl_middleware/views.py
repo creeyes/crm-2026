@@ -13,7 +13,7 @@ from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
 from .tasks import sync_associations_background
 # IMPORTANTE: AÑADIDA LA NUEVA FUNCIÓN A LOS IMPORTS
 from .utils import get_valid_token, get_association_type_id 
-from .models import Provincia
+from .models import Provincia, Municipio, Zona
 
 logger = logging.getLogger(__name__)
 
@@ -399,6 +399,7 @@ def registrar_ubicacion(request):
             'message': f'Error en el servidor: {str(e)}'
 
         }, status=500)
+
 
 
 
