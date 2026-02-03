@@ -345,8 +345,6 @@ def api_get_zonas_tree(request):
     return JsonResponse({"zonas": arbol})
 @csrf_exempt
 def registrar_ubicacion(request):
-    print(request)
-    print("Banderaa")
     datos = json.loads(request.body)
     nombre_prov = datos.get('provincia', '').strip()
     nombre_muni = datos.get('municipio', '').strip()
@@ -365,21 +363,21 @@ def registrar_ubicacion(request):
             nombre__iexact=nombre_prov, 
             defaults={'nombre': nombre_prov}
         )
-
+        print("oasamos la provincia")
         # Creamos/Buscamos Municipio (vinculado a esa provincia)
         muni_obj, muni_creado = Municipio.objects.get_or_create(
             nombre__iexact=nombre_muni,
             provincia=prov_obj,
             defaults={'nombre': nombre_muni}
         )
-
+        print("pasamos el municipio")
         # Creamos/Buscamos Zona (vinculada a ese municipio)
         zona_obj, zona_creada = Zona.objects.get_or_create(
             nombre__iexact=nombre_zona,
             municipio=muni_obj,
             defaults={'nombre': nombre_zona}
         )
-
+        print("pasamos la zona")
         # 4. Comprobamos si ALGO es nuevo
         # Si cualquiera de los tres booleanos es True, significa que hemos "añadido" algo a la DB
         si_algo_es_nuevo = prov_creada or muni_creado or zona_creada
@@ -401,6 +399,7 @@ def registrar_ubicacion(request):
             'message': f'Error en el servidor: {str(e)}'
 
         }, status=500)
+
 
 
 
