@@ -7,8 +7,5 @@ from . import views
 app_name = 'ghl_front'
 
 urlpatterns = [
-    # Aquí puedes agregar tus rutas
-    # Ejemplo:
-    # path('', views.index, name='index'),
-    # path('dashboard/', views.dashboard, name='dashboard'),
+    path('api/public/properties/', PublicPropertyList.as_view(), name='public_properties'),
 ]
