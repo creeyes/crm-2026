@@ -10,15 +10,15 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     baths = serializers.IntegerField(default=1)
     sqm = serializers.IntegerField(source='metros')
     
-    # --- GESTIÓN SEGURA DE IMÁGENES ---
-    image = serializers.SerializerMethodField()  # Portada (con placeholder)
-    images = serializers.SerializerMethodField() # Galería (siempre devuelve lista)
-    # ----------------------------------
+    # --- IMÁGENES Y DESCRIPCIÓN ---
+    image = serializers.SerializerMethodField()     # Para la portada (Card)
+    images = serializers.SerializerMethodField()    # Para la galería (Detalle)
+    description = serializers.SerializerMethodField()
+    # ------------------------------
 
     type = serializers.SerializerMethodField()
     features = serializers.SerializerMethodField()
     isFeatured = serializers.SerializerMethodField()
-    description = serializers.SerializerMethodField()
 
     class Meta:
         model = Propiedad
@@ -39,18 +39,17 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         return f"Oportunidad en {zona}"
 
     def get_location(self, obj):
-        if obj.zona:
-            return obj.zona.nombre
+        if obj.zona: return obj.zona.nombre
         return "Consultar Ubicación"
 
     def get_image(self, obj):
-        # PROTECCIÓN 1: Si no hay foto, devuelve placeholder
+        # Devuelve la primera imagen o un placeholder si no hay
         if obj.imagenesUrl and isinstance(obj.imagenesUrl, list) and len(obj.imagenesUrl) > 0:
             return obj.imagenesUrl[0]
         return "https://placehold.co/600x400?text=Sin+Imagen"
 
     def get_images(self, obj):
-        # PROTECCIÓN 2: Si es null, devuelve lista vacía []
+        # Devuelve siempre una lista, aunque esté vacía, para no romper el front
         if not obj.imagenesUrl or not isinstance(obj.imagenesUrl, list):
             return []
         return obj.imagenesUrl
@@ -73,10 +72,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         return obj.precio > 500000
 
     def get_description(self, obj):
+        # Generamos descripción automática para evitar errores
         ubicacion = self.get_location(obj)
         tipo = self.get_type(obj)
-        return (
-            f"Excelente {tipo} situado en {ubicacion}. "
-            f"Cuenta con una superficie de {obj.metros}m² y {obj.habitaciones} habitaciones. "
-            "Una oportunidad única en el mercado. Contáctanos para más detalles."
-        )
+        return f"Excelente {tipo} en {ubicacion} con {obj.metros}m² y {obj.habitaciones} habitaciones. Contáctanos para visitar."
