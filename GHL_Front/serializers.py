@@ -5,26 +5,32 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='ghl_contact_id')
     title = serializers.SerializerMethodField()
     
-    # 1. CORRECCIÓN IMPORTANTE: Mapeamos 'price' (Front) a 'precio' (Back)
+    # 1. Mapeo de Precio
     price = serializers.DecimalField(source='precio', max_digits=12, decimal_places=0)
     
-    # 2. Mantenemos el fix de location para evitar el error 500 si es null
     location = serializers.SerializerMethodField()
-    
     beds = serializers.IntegerField(source='habitaciones')
     baths = serializers.IntegerField(default=1)
     sqm = serializers.IntegerField(source='metros')
+    
+    # 2. IMÁGENES: Portada y Galería completa
     image = serializers.SerializerMethodField()
+    images = serializers.ListField(source='imagenesUrl', child=serializers.CharField(), read_only=True)
+    
     type = serializers.SerializerMethodField()
     features = serializers.SerializerMethodField()
     isFeatured = serializers.SerializerMethodField()
+    
+    # 3. DESCRIPCIÓN: Generada dinámicamente (porque el modelo no tiene campo texto)
+    description = serializers.SerializerMethodField()
 
     class Meta:
         model = Propiedad
         fields = [
             'id', 'title', 'price', 'location', 
             'beds', 'baths', 'sqm', 'type', 
-            'image', 'features', 'isFeatured'
+            'image', 'images', 'features', 'isFeatured',
+            'description'  # <--- Añadido al output
         ]
 
     def get_title(self, obj):
@@ -43,6 +49,7 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         return "Consultar Ubicación"
 
     def get_image(self, obj):
+        # Devuelve la primera imagen si existe, para la "card"
         if obj.imagenesUrl and isinstance(obj.imagenesUrl, list) and len(obj.imagenesUrl) > 0:
             return obj.imagenesUrl[0]
         return "https://placehold.co/600x400?text=Sin+Imagen"
@@ -64,5 +71,14 @@ class PropiedadPublicaSerializer(serializers.ModelSerializer):
         return features
         
     def get_isFeatured(self, obj):
-        # Usamos 'precio' del objeto original, no 'price'
         return obj.precio > 500000
+
+    def get_description(self, obj):
+        # Generamos un texto atractivo usando los datos disponibles
+        ubicacion = self.get_location(obj)
+        tipo = self.get_type(obj)
+        return (
+            f"Excelente {tipo} situado en {ubicacion}. "
+            f"Cuenta con una superficie de {obj.metros}m² y {obj.habitaciones} habitaciones. "
+            "Una oportunidad única en el mercado. Contáctanos para más detalles."
+        )
