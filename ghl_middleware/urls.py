@@ -2,7 +2,7 @@ from django.urls import path
 # Importamos también la vista del OAuth (GHLOAuthCallbackView) y la nueva GHLLaunchView
 from .views import WebhookPropiedadView, WebhookClienteView, GHLOAuthCallbackView
 from . import views
-
+from .views import PublicPropertyList, PublicPropertyDetail
 urlpatterns = [
     
 
@@ -16,6 +16,7 @@ urlpatterns = [
     path('webhooks/zonasprovincia/', views.api_get_zonas_tree, name='get_zonas_tree'),
     path('webhooks/zonasprovincia/nuevo/', views.registrar_ubicacion, name='add_zonas_tree')
 ]
+
 
 
 
