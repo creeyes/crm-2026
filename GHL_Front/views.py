@@ -18,3 +18,13 @@ class PublicPropertyList(generics.ListAPIView):
         
         # Si no pasan ID, devolvemos vacío para no mezclar datos
         return Propiedad.objects.none()
+
+class PublicPropertyDetail(generics.RetrieveAPIView):
+    """
+    Vista para obtener el detalle de una sola propiedad usando su GHL Contact ID.
+    """
+    queryset = Propiedad.objects.filter(estado='activo')
+    serializer_class = PropiedadPublicaSerializer
+    lookup_field = 'ghl_contact_id'  # IMPORTANTE: Buscamos por el ID de GHL, no el ID numérico de Django
+    authentication_classes = []
+    permission_classes = []
