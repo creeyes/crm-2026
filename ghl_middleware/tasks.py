@@ -1,6 +1,8 @@
 import threading
 import logging
-from .utils import ghl_associate_records, ghl_get_current_associations, ghl_delete_association
+from .utils import ghl_associate_records, ghl_get_current_associations, ghl_delete_association, ghlActualizarZonaAPI
+from .models import Zona, Agencia, GHLToken
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,4 +33,33 @@ def sync_associations_background(access_token, location_id, origin_record_id, ta
             ghl_associate_records(access_token, location_id, origin_record_id, contact_id, association_id_val)
 
     task_thread = threading.Thread(target=_worker_process)
+    task_thread.start()
+
+def funcionAsyncronaZonas():
+    def actualizacionZonasAgencias():
+        opcionesPropiedad = []
+        opcionesCliente = []
+        for zona in Zona.objects.all:
+            label = zona.nombre             
+            value = label.lower().strip().replace(" ", "_")
+            
+            opcionesPropiedad.append({
+                "label": label,
+                "value": value
+            })
+            opcionesCliente.append(label)
+
+        # Estos dos de momento están hardcodeados, pero luego se ha de cambiar para que sea automatico y lo lea por agencia
+        idPropiedad = ["otsVf8GDT9QyqTeVbNs5","hS4cEeTEOSITPlkOyYx5"]
+        idCliente = ["dTS9Cyfwu7pbK28roBMK","kAMWAxQudbtRtEWWL4eE"]
+
+        for i, agencia in enumerate(Agencia.objects.all()):
+            locationId = agencia.location_id
+            token = GHLToken.objects.get(location_id = locationId)
+            urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
+            urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
+            ghlActualizarZonaAPI(locationId, opcionesPropiedad, idCliente[i], token, urlPropiedad, True)
+            ghlActualizarZonaAPI(locationId, opcionesCliente, idCliente[i], token, urlCliente, False)
+
+    task_thread = threading.Thread(target=actualizacionZonasAgencias)
     task_thread.start()

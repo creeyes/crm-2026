@@ -1,6 +1,5 @@
 import logging
 import requests
-import json
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -8,9 +7,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Q
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
-from .models import Agencia, Propiedad, Cliente, GHLToken, Zona
-from .tasks import sync_associations_background
+
+from .models import Agencia, Propiedad, Cliente, GHLToken
+from .tasks import sync_associations_background, funcionAsyncronaZonas
 # IMPORTANTE: AÑADIDA LA NUEVA FUNCIÓN A LOS IMPORTS
 from .utils import get_valid_token, get_association_type_id 
 from .models import Provincia, Municipio, Zona
@@ -305,6 +304,7 @@ class WebhookClienteView(APIView):
             access_token = get_valid_token(location_id)
 
             if access_token:
+                # Esto podría saturar railway. OJO
                 for prop in propiedades_match:
                     todos_los_interesados = prop.interesados.all()
                     target_ids = [c.ghl_contact_id for c in todos_los_interesados]
@@ -343,12 +343,11 @@ def api_get_zonas_tree(request):
     
     # Envolvemos en un diccionario. safe=True es el valor por defecto.
     return JsonResponse({"zonas": arbol})
-@csrf_exempt
+
 def registrar_ubicacion(request):
-    datos = json.loads(request.body)
-    nombre_prov = datos.get('provincia', '').strip()
-    nombre_muni = datos.get('municipio', '').strip()
-    nombre_zona = datos.get('zona', '').strip()
+    nombre_prov = request.POST.get('provincia', '').strip()
+    nombre_muni = request.POST.get('municipio', '').strip()
+    nombre_zona = request.POST.get('zona', '').strip()
 
     if not nombre_prov or not nombre_muni or not nombre_zona:
         return JsonResponse({
@@ -363,21 +362,25 @@ def registrar_ubicacion(request):
             nombre__iexact=nombre_prov, 
             defaults={'nombre': nombre_prov}
         )
-        print("oasamos la provincia")
+
         # Creamos/Buscamos Municipio (vinculado a esa provincia)
         muni_obj, muni_creado = Municipio.objects.get_or_create(
             nombre__iexact=nombre_muni,
             provincia=prov_obj,
             defaults={'nombre': nombre_muni}
         )
-        print("pasamos el municipio")
+
         # Creamos/Buscamos Zona (vinculada a ese municipio)
         zona_obj, zona_creada = Zona.objects.get_or_create(
             nombre__iexact=nombre_zona,
             municipio=muni_obj,
             defaults={'nombre': nombre_zona}
         )
-        print("pasamos la zona")
+
+        # Funcion para actualizar las zonas en GHL.
+        if zona_creada:
+            funcionAsyncronaZonas()
+
         # 4. Comprobamos si ALGO es nuevo
         # Si cualquiera de los tres booleanos es True, significa que hemos "añadido" algo a la DB
         si_algo_es_nuevo = prov_creada or muni_creado or zona_creada
@@ -397,12 +400,4 @@ def registrar_ubicacion(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Error en el servidor: {str(e)}'
-
         }, status=500)
-
-
-
-
-
-
-

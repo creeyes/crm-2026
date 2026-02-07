@@ -196,3 +196,43 @@ def get_association_type_id(access_token, location_id, object_key="propiedad"):
     except Exception as e:
         logger.error(f"❌ Excepción buscando Association ID: {str(e)}")
         return None
+
+def ghlActualizarZonaAPI(locationId, opciones, token, url, prop):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Version": "2021-07-28",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+    try:
+        # Enviamos la petición
+        if prop:
+            response = requests.put(
+                url, 
+                headers=headers, 
+                json={
+                    "locationId":locationId,
+                    "showInForms": True,
+                    "options":opciones
+                    },  
+                timeout=10
+            )
+        else:
+            response = requests.put(
+                url, 
+                headers=headers, 
+                json={"options":opciones}, 
+                timeout=10
+            )
+        
+        # Verificamos si GHL aceptó el cambio (200 OK o 204 No Content)
+        if response.status_code in [200, 204]:
+            print("✅ Actualización exitosa")
+            return response.json() if response.text else True
+        else:
+            print(f"❌ Error {response.status_code}: {response.text}")
+            return None
+
+    except Exception as e:
+        print(f"💥 Error de conexión: {e}")
+        return None
