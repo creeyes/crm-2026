@@ -39,7 +39,7 @@ def funcionAsyncronaZonas():
     def actualizacionZonasAgencias():
         opcionesPropiedad = []
         opcionesCliente = []
-        for zona in Zona.objects.all:
+        for zona in Zona.objects.all():
             label = zona.nombre             
             value = label.lower().strip().replace(" ", "_")
             
