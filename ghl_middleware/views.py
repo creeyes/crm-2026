@@ -1,5 +1,6 @@
 import logging
 import requests
+import json
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -347,9 +348,10 @@ def api_get_zonas_tree(request):
 
 @csrf_exempt
 def registrar_ubicacion(request):
-    nombre_prov = request.POST.get('provincia', '').strip()
-    nombre_muni = request.POST.get('municipio', '').strip()
-    nombre_zona = request.POST.get('zona', '').strip()
+    datos = json.loads(request.body)
+    nombre_prov = datos.get('provincia', '').strip()
+    nombre_muni = datos.get('municipio', '').strip()
+    nombre_zona = datos.get('zona', '').strip()
 
     if not nombre_prov or not nombre_muni or not nombre_zona:
         return JsonResponse({
