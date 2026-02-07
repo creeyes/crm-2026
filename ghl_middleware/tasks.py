@@ -57,6 +57,7 @@ def funcionAsyncronaZonas():
             locationId = agencia.location_id
             if locationId:
                 token = GHLToken.objects.get(location_id = locationId).access_token
+                print(token)
                 urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
                 urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
                 ghlActualizarZonaAPI(locationId, opcionesPropiedad, token, urlPropiedad, True)
@@ -65,4 +66,5 @@ def funcionAsyncronaZonas():
                 print("No existe location ID. Por lo que se presupone que no existe la agencia")
 
     task_thread = threading.Thread(target=actualizacionZonasAgencias)
+
     task_thread.start()
