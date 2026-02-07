@@ -50,8 +50,8 @@ def funcionAsyncronaZonas():
             opcionesCliente.append(label)
 
         # Estos dos de momento están hardcodeados, pero luego se ha de cambiar para que sea automatico y lo lea por agencia
-        idPropiedad = ["hS4cEeTEOSITPlkOyYx5","otsVf8GDT9QyqTeVbNs5"]
-        idCliente = ["kAMWAxQudbtRtEWWL4eE","dTS9Cyfwu7pbK28roBMK"]
+        idPropiedad = ["otsVf8GDT9QyqTeVbNs5","hS4cEeTEOSITPlkOyYx5"]
+        idCliente = ["dTS9Cyfwu7pbK28roBMK","kAMWAxQudbtRtEWWL4eE"]
 
         for i, agencia in enumerate(Agencia.objects.all()):
             locationId = agencia.location_id
