@@ -56,7 +56,7 @@ def funcionAsyncronaZonas():
         for i, agencia in enumerate(Agencia.objects.all()):
             locationId = agencia.location_id
             if locationId:
-                token = GHLToken.objects.get(location_id = locationId)
+                token = GHLToken.objects.get(location_id = locationId).access_token
                 urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
                 urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
                 ghlActualizarZonaAPI(locationId, opcionesPropiedad, token, urlPropiedad, True)
