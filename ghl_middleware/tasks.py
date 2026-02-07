@@ -58,8 +58,8 @@ def funcionAsyncronaZonas():
             token = GHLToken.objects.get(location_id = locationId)
             urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
             urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
-            ghlActualizarZonaAPI(locationId, opcionesPropiedad, idCliente[i], token, urlPropiedad, True)
-            ghlActualizarZonaAPI(locationId, opcionesCliente, idCliente[i], token, urlCliente, False)
+            ghlActualizarZonaAPI(locationId, opcionesPropiedad, token, urlPropiedad, True)
+            ghlActualizarZonaAPI(locationId, opcionesCliente, token, urlCliente, False)
 
     task_thread = threading.Thread(target=actualizacionZonasAgencias)
     task_thread.start()
