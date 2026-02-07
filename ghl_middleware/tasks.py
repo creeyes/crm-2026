@@ -50,16 +50,19 @@ def funcionAsyncronaZonas():
             opcionesCliente.append(label)
 
         # Estos dos de momento están hardcodeados, pero luego se ha de cambiar para que sea automatico y lo lea por agencia
-        idPropiedad = ["otsVf8GDT9QyqTeVbNs5","hS4cEeTEOSITPlkOyYx5"]
-        idCliente = ["dTS9Cyfwu7pbK28roBMK","kAMWAxQudbtRtEWWL4eE"]
+        idPropiedad = ["hS4cEeTEOSITPlkOyYx5","otsVf8GDT9QyqTeVbNs5"]
+        idCliente = ["kAMWAxQudbtRtEWWL4eE","dTS9Cyfwu7pbK28roBMK"]
 
         for i, agencia in enumerate(Agencia.objects.all()):
             locationId = agencia.location_id
-            token = GHLToken.objects.get(location_id = locationId)
-            urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
-            urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
-            ghlActualizarZonaAPI(locationId, opcionesPropiedad, token, urlPropiedad, True)
-            ghlActualizarZonaAPI(locationId, opcionesCliente, token, urlCliente, False)
+            if locationId:
+                token = GHLToken.objects.get(location_id = locationId)
+                urlPropiedad = f"https://services.leadconnectorhq.com/custom-fields/{idPropiedad[i]}/"
+                urlCliente = f"https://services.leadconnectorhq.com/locations/{locationId}/customFields/{idCliente[i]}/"
+                ghlActualizarZonaAPI(locationId, opcionesPropiedad, token, urlPropiedad, True)
+                ghlActualizarZonaAPI(locationId, opcionesCliente, token, urlCliente, False)
+            else:
+                print("No existe location ID. Por lo que se presupone que no existe la agencia")
 
     task_thread = threading.Thread(target=actualizacionZonasAgencias)
     task_thread.start()
