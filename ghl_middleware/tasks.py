@@ -45,7 +45,7 @@ def funcionAsyncronaZonas():
             
             opcionesPropiedad.append({
                 "label": label,
-                "value": value
+                "key": value
             })
             opcionesCliente.append(label)
 
