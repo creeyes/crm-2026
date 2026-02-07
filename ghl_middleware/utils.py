@@ -204,6 +204,7 @@ def ghlActualizarZonaAPI(locationId, opciones, token, url, prop):
         "Content-Type": "application/json",
         "Accept": "application/json"
     }
+    print(f'"options":{opciones}')
     try:
         # Enviamos la petición
         if prop:
