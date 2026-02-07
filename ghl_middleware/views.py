@@ -8,6 +8,7 @@ from rest_framework import status
 from django.db.models import Q
 from django.http import JsonResponse
 
+from django.views.decorators.csrf import csrf_exempt
 from .models import Agencia, Propiedad, Cliente, GHLToken
 from .tasks import sync_associations_background, funcionAsyncronaZonas
 # IMPORTANTE: AÑADIDA LA NUEVA FUNCIÓN A LOS IMPORTS
@@ -344,6 +345,7 @@ def api_get_zonas_tree(request):
     # Envolvemos en un diccionario. safe=True es el valor por defecto.
     return JsonResponse({"zonas": arbol})
 
+@csrf_exempt
 def registrar_ubicacion(request):
     nombre_prov = request.POST.get('provincia', '').strip()
     nombre_muni = request.POST.get('municipio', '').strip()
