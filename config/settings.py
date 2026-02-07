@@ -123,8 +123,6 @@ REST_FRAMEWORK = {
 # --- SEGURIDAD EXTRA PARA RAILWAY Y GHL ---
 # Confía en el HTTPS de Railway
 CSRF_TRUSTED_ORIGINS = [
-    'https://api.leadconnectorhq.com', 
-    'https://widgets.leadconnectorhq.com', 
     'https://app.gohighlevel.com', # <--- CORREGIDO: Añadida coma que faltaba
     'https://*.railway.app', 
     'https://*.up.railway.app'
@@ -188,3 +186,4 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CSRF_COOKIE_SAMESITE = 'None'  # Permite que la cookie viaje entre dominios
 CSRF_COOKIE_SECURE = True       # Obligatorio si usas 'None'
+
